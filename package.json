@@ -1,0 +1,16 @@
+{
+  "name": "com.moonbunny.libdemech2sharp",
+  "version": "0.1.0",
+  "displayName": "libDemech2Sharp",
+  "description": "C# port of demech2's MechWarrior 2 simulation logic (mechs, weapons, AI, collision, cockpit), built as Demech2.dll. LGPL-3.0.",
+  "unity": "6000.3",
+  "license": "LGPL-3.0-only",
+  "dependencies": {
+    "com.unity.collections": "2.6.2",
+    "com.unity.mathematics": "1.3.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JennaScvl/libDemech2Sharp.git"
+  }
+}
