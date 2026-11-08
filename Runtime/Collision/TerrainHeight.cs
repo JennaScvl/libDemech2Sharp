@@ -34,33 +34,33 @@ namespace Demech2
             public FixVec[] Normals;   // each triangle's (16.16)
             public int[] PolygonFirst; // each polygon's first triangle; its triangles run to the next polygon's first
             public Node Root;
-            public int[][] LocalTriangles; // Mercenaries' box shapes: each mesh's triangles, its winding flipped (load time)
+            public int[][] LocalTriangles; // a box shape's meshes' triangles, the winding flipped (load time; a derived ground's)
             public bool[] LocalMirrored;
             public WorldPose FacesPose;    // the pose their quadtree was built at
             public bool BoxBuilt;
         }
 
-        // Which game's ground rules the map plays by (GroundRules).
-        protected const int RulesMain = 0, RulesGhostBear = 1, RulesMercenaries = 2;
-
         const int LeafFaces = 25;
         const long RayLift = 10L << 16; // how far above the point the ground ray starts
-        const long MercsRayLift = 1000L << 16; // Mercenaries' window above the point
 
-        readonly List<GroundShape> shapes = new List<GroundShape>();
+        protected readonly List<GroundShape> shapes = new List<GroundShape>();
 
-        static readonly FixVec Up = new FixVec(0, Fixed.One, 0);
+        protected static readonly FixVec Up = new FixVec(0, Fixed.One, 0);
 
         // g_groundNormal: the normal of the surface the last query returned (zero for none), 16.16.
-        public FixVec GroundNormal { get; private set; }
+        public FixVec GroundNormal { get; protected set; }
 
         public int ShapeCount => shapes.Count;
 
         // The world pose of node p_node (one of a shape's Nodes).
         protected abstract WorldPose GetNodePose(object p_node);
 
-        // The map's game's rules, asked on each query (RulesMain, RulesGhostBear, RulesMercenaries).
-        protected abstract int GroundRules { get; }
+        // A derived ground's own query (true, p_height its result), asked first on each GetTerrainHeight.
+        protected virtual bool OwnTerrainHeight(FixVec p_at, out long p_height)
+        {
+            p_height = 0;
+            return false;
+        }
 
         protected void AddShape(GroundShape p_shape) => shapes.Add(p_shape);
 
@@ -146,7 +146,7 @@ namespace Demech2
         }
 
         // Floored to a whole unit (Mathf.Floor of the float's).
-        static long FloorUnit(long p_value) => p_value & ~0xffffL;
+        protected static long FloorUnit(long p_value) => p_value & ~0xffffL;
 
         // BuildQuadtreeChild: quadrant bit 1 the high X half, bit 2 the high Z half (from the middle + 1); null when
         // it's empty. More than 25 faces split it again.
@@ -229,9 +229,7 @@ namespace Demech2
         // shapes are ground, so the mech casting the ray never hits itself.
         public long GetTerrainHeight(FixVec p_at)
         {
-            int rules = GroundRules;
-            if (rules == RulesGhostBear) return GetTerrainHeightGbl(p_at);
-            if (rules == RulesMercenaries) return GetTerrainHeightMercs(p_at);
+            if (OwnTerrainHeight(p_at, out long own)) return own;
             long start = p_at.Y + RayLift, best = 0;
             GroundNormal = Up;
             foreach (GroundShape shape in shapes)
@@ -252,91 +250,8 @@ namespace Demech2
             return best;
         }
 
-        // Mercenaries (MERCSW.DLL 0x100142b4: the highest top within 1000 of p_y, else the highest below, else 0) as
-        // the engine's ray from 1000 above, never below the ground plane at 0: the nearest upward face of any ground
-        // shape under the point (a box shape's own triangles, not its box). Integer math, so every machine agrees.
-        long GetTerrainHeightMercs(FixVec p_at)
-        {
-            // Floored at the ground plane (0): a sunken mesh never takes the mech below it.
-            long start = p_at.Y + MercsRayLift, best = 0;
-            // Mercenaries' positions are whole units; a fraction could fall between a node's halves (mid, mid + 1).
-            long x = FloorUnit(p_at.X), z = FloorUnit(p_at.Z);
-            GroundNormal = Up;
-            foreach (GroundShape shape in shapes)
-            {
-                if (shape.Kind == 0) UpdateBoxFaces(shape);
-                RayQuadtree(shape, shape.Root, x, z, start, ref best);
-            }
-
-            return best;
-        }
-
-        // Mercenaries: a box shape's triangles where it stands (its meshes' nodes), in a quadtree, again once it moved.
-        void UpdateBoxFaces(GroundShape p_shape)
-        {
-            UpdateBox(p_shape);
-            if (p_shape.Root != null && p_shape.Triangles != null && p_shape.Pose.Equals(p_shape.FacesPose)) return;
-            p_shape.FacesPose = p_shape.Pose;
-            var vertices = new List<FixVec>();
-            var triangles = new List<int>();
-            for (int f = 0; f < p_shape.Nodes.Length; f++)
-            {
-                WorldPose pose = GetNodePose(p_shape.Nodes[f]);
-                int first = vertices.Count;
-                foreach (FixVec vertex in p_shape.Local[f]) vertices.Add(pose.TransformPoint(vertex));
-                int[] indices = p_shape.LocalTriangles[f];
-                bool mirrored = p_shape.LocalMirrored[f];
-                for (int i = 0; i + 2 < indices.Length; i += 3)
-                {
-                    triangles.Add(first + indices[i]);
-                    triangles.Add(first + indices[mirrored ? i + 2 : i + 1]);
-                    triangles.Add(first + indices[mirrored ? i + 1 : i + 2]);
-                }
-            }
-
-            BuildQuadtreeFrom(p_shape, vertices, triangles);
-        }
-
         // g_hitNormal: the last hit surface's normal, kept across queries (a quadtree miss doesn't set it).
-        FixVec hitNormal;
-
-        // Ghost Bear's Legacy (MW2.flat 0x1c370, as demech2 collision.c GetTerrainHeight): each shape's top under the
-        // point; the first top below p_y (while nothing is within 1000 of it) and the highest top within 1000 of p_y.
-        long GetTerrainHeightGbl(FixVec p_at)
-        {
-            const long none = long.MinValue, window = 1000L << 16;
-            long y = p_at.Y, below = none, best = none;
-            GroundNormal = FixVec.Zero;
-            foreach (GroundShape shape in shapes)
-            {
-                long top;
-                if (shape.Kind == 0)
-                {
-                    // GetBoxTop
-                    UpdateBox(shape);
-                    if (p_at.X < shape.BoxMin.X || p_at.X > shape.BoxMax.X || p_at.Z < shape.BoxMin.Z || p_at.Z > shape.BoxMax.Z)
-                        continue;
-                    top = shape.BoxMax.Y;
-                    hitNormal = Up;
-                }
-                else if (!GetQuadtreeTop(shape, shape.Root, p_at.X, p_at.Z, out top)) continue;
-
-                if (best == none && top < y && below < top)
-                {
-                    below = top;
-                    GroundNormal = hitNormal;
-                }
-
-                if (top + window > y && top - window < y && best < top)
-                {
-                    best = top;
-                    GroundNormal = hitNormal;
-                }
-            }
-
-            if (best != none) return best;
-            return below != none ? below : 0;
-        }
+        protected FixVec hitNormal;
 
         // IsBelowFacePlane's height: the plane's height at (x, z) over face p_face (its first vertex and normal).
         static long PlaneHeight(GroundShape p_shape, int p_face, FixVec p_normal, long p_x, long p_z)
@@ -347,7 +262,7 @@ namespace Demech2
 
         // GetQuadtreeTop (0x1d900): the first child holding the point, or the leaf's first upward face over it; a node
         // holding the point with neither hits at 0 (hitNormal unchanged).
-        bool GetQuadtreeTop(GroundShape p_shape, Node p_node, long p_x, long p_z, out long p_top)
+        protected bool GetQuadtreeTop(GroundShape p_shape, Node p_node, long p_x, long p_z, out long p_top)
         {
             p_top = 0;
             if (p_node == null) return false;
@@ -374,7 +289,7 @@ namespace Demech2
         }
 
         // The highest upward face under the point at or below p_start in the leaves holding it, above p_best.
-        void RayQuadtree(GroundShape p_shape, Node p_node, long p_x, long p_z, long p_start, ref long p_best)
+        protected void RayQuadtree(GroundShape p_shape, Node p_node, long p_x, long p_z, long p_start, ref long p_best)
         {
             if (p_node == null) return;
             if (p_node.MinX > p_x || p_node.MaxX < p_x || p_node.MinZ > p_z || p_node.MaxZ < p_z) return;

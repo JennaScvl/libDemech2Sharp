@@ -5,7 +5,7 @@ namespace Demech2
     // The palette's fades (demech2 MW2/src/palette.c: StartPaletteFade, StartPaletteFlash, UpdatePaletteFade,
     // GetPaletteFadeSteps; fadepal.c: FlashZappedPalette, FlashZappedPaletteLevel), drawn by the game as a translucent
     // plane over the whole screen (cockpit and all) in the fade's color: the screen tints toward the palette and back
-    // with the original's timing. The Matrox edition itself tints its textures for three of the palettes
+    // with the original's timing. The original itself tints its textures for three of the palettes
     // (StartPaletteFade's colors: ZAPPED red, slot 0xc green, slot 0x10 black). Not the original's: the palette isn't
     // swapped, the plane stands in for it; only ZAPPED and black draw (explosions light the world instead); the
     // infrared green is the game's light amplification's instead. Every fade keeps its timing (the effect camera waits

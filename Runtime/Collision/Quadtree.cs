@@ -87,7 +87,7 @@ namespace Demech2
 
                     node.MaxY = highY;
                     node.MinY = lowY;
-                    // The Matrox edition compares its float with the integer 0x7fffffff here: never true, so no check.
+                    // The original compares its float with the integer 0x7fffffff here: never true, so no check.
                     return node;
                 }
 
@@ -173,7 +173,7 @@ namespace Demech2
                 }
             }
 
-            // The Matrox edition compares with the integer 0x7fffffff (units).
+            // The original compares with the integer 0x7fffffff (units).
             if (nearest < (long)int.MaxValue << 16)
             {
                 p_ray = best;

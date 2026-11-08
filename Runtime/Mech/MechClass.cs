@@ -73,7 +73,7 @@ namespace Demech2
 
         // Mech::m_powerState: 0 off (about to start), 1 starting up, 2 running, 3 shut down, 4 destroyed, 5 ejecting,
         // 7 self-destructing; m_stateTime, when the state moves on (and the lock timer while running).
-        // Not the original's: in a MekNet match dead is sticky. While the player is out (flags 6, KillMech's) only a wreck
+        // In a live networked match dead is sticky. While the player is out (flags 6, KillMech's) only a wreck
         // (4) or an ejection (5) is taken, anything else becomes 4, whatever writes it (a rewind's restore, a stale host
         // state, the AI, a power request); ReloadPlayerMech clears the flags first.
         public int PowerState
@@ -85,15 +85,15 @@ namespace Demech2
         public int m_powerState;
         public int m_stateTime;
 
-        // g_powerRequest: 1 power up, -1 shut down (the startup and shutdown keys). Not the original's: the mech's own
-        // (a pilot's command, PilotCommands), as are the other requests below.
+        // g_powerRequest: 1 power up, -1 shut down (the startup and shutdown keys): the mech's own (a pilot's command),
+        // as are the other requests below.
         public int m_powerRequest;
 
         // g_jettisonAmmoRequested (JETTISON_AMMO), g_toggleMascRequested (TOGGLE_MASC), PUNCH_IN_AUTO_HDG, the
         // shutdown override's key (Cockpit.OverrideShutdown's), g_feetToTorso (FEET_TO_TORSO).
         public bool m_jettisonAmmoRequested, m_toggleMascRequested, m_punchInRequested, m_overrideShutdownRequested, m_feetToTorso;
 
-        // g_autoEject as a MekNet match has it: the pilot's own (Combat.AutoEject elsewhere).
+        // g_autoEject as a networked match has it: the pilot's own (SimMain.g_autoEject elsewhere).
         public bool m_autoEject;
 
         // g_ejectStarted, g_localMechDestroyed: UpdateLocalMech's, the mech's own.
@@ -123,9 +123,8 @@ namespace Demech2
         public int m_selectedWeapon;
         public int m_lastSelectedWeapon;
 
-        // Titanium's mech+0xe42 bit 1: hit by a NARC beacon (guided weapons lock on at once), until LoadMechConfig or ten
-        // seconds into a shutdown.
-        public bool m_narced;
+        // The host's data for this mech, or null.
+        public object m_ext;
 
         // m_mobility: 16.16, scales the throttle; each leg hit takes 0.1.
         public int m_mobility = 0x10000;
@@ -158,9 +157,9 @@ namespace Demech2
 
         public bool IsLocal => m_player.m_index == SimMain.g_localPlayerId;
 
-        // Not the original's split: the mech a human flies (the local player's in single player, every match slot's in
-        // MekNet). The sim's gameplay branches test this, the same on every machine; IsLocal is only this machine's view,
-        // sounds and records.
+        // The mech a human flies (the local player's in single player, every match slot's in a networked match). The
+        // sim's gameplay branches test this, the same on every machine; IsLocal is only this machine's view, sounds and
+        // records.
         public bool IsPilot => SimMain.IsPilot(m_player.m_index);
 
         // g_reticleTargeting and g_aimedShape (Targeting, UpdateAimDistance): the pilot's own (Combat.AimedShape is the
@@ -174,9 +173,9 @@ namespace Demech2
         // The torso's twist limit (16.16), for the lockstep input's clamp.
         public int MaxTorsoTwist => m_maxTorsoTwist;
 
-        // Not the original's: a human-piloted Tarantula's torso turns freely (no twist limit), the controls spinning it
-        // (InputMap.FreeTorsoPan) and the torso taking the shortest way to the steering's angle.
-        public bool FreeTorsoTwist => m_player.m_aiMode == 0 && m_player.m_chassis != null && m_player.m_chassis.StartsWith("TAR", StringComparison.OrdinalIgnoreCase);
+        // The torso turns freely when the host says so (no twist limit), the controls spinning it (InputMap.FreeTorsoPan)
+        // and the torso taking the shortest way to the steering's angle.
+        public bool FreeTorsoTwist => Host.Mechs.FreeTorsoTwist(this);
 
         // An angle difference (16.16 degrees) within half a turn.
         public static int WrapTwist(int p_delta)
@@ -186,8 +185,8 @@ namespace Demech2
             return p_delta;
         }
 
-        // Not the original's: a MekNet player gone mid-match (the step bundle's flag, Lockstep): the self-destruct the
-        // key starts (LateUpdateMech), forced whatever the power state, but a wreck's.
+        // A networked player gone mid-match: the self-destruct the key starts (LateUpdateMech), forced whatever the
+        // power state, but a wreck's.
         public void ForceSelfDestruct()
         {
             if (PowerState == 4 || (PlayerFlags & 6) != 0) return;
@@ -196,21 +195,17 @@ namespace Demech2
         }
         public bool Running => PowerState == 2;
 
-        // Not in the original: a mech shut down mid-jump slid on its jets' speed forever, through what it hit (the
-        // original moves a mech that isn't running or dead without collisions). Fixed in a MekNet match always, else in
-        // MoonBunny Edition: it slows as if the jets' key were let up, and collides while shut down or powering up.
-        public static bool ShutdownStopsJets => Host.Net.NetRules || Host.Variant.MoonBunnyEdition;
+        // A mech shut down mid-jump slides on its jets' speed (the original moves a mech that isn't running or dead
+        // without collisions); with the host's ShutdownStopsJets it slows as if the jets' key were let up, and collides
+        // while shut down or powering up.
+        public static bool ShutdownStopsJets => Host.Mechs.ShutdownStopsJets;
 
         // Player::m_killer, m_inspectedBy.
         public int m_killer = -1;
         public int m_inspectedBy;
 
-        // Player::m_targetInfo; Titanium's second, the autopilot's route nav (+0xe8, FUN_10015bdc): Targeting writes it
-        // with the main target's nav, the autopilot follows it.
+        // Player::m_targetInfo.
         public readonly PlayerTargetInfo m_targetInfo = new PlayerTargetInfo();
-        public readonly PlayerTargetInfo m_routeInfo = new PlayerTargetInfo();
-        public static bool TitaniumRoute => Host.Variant.IsTitanium;
-        public bool m_fallSoundPlayed; // Titanium 0xe42 & 8: MECHFALL played since last airborne
 
         // FirstMech: the ramps, the weapon, heat and power state, the velocities, the steering, the pose, the AI
         // (InitializeAI); the top speed scaled down by the planet's gravity (g_gravityScale).
@@ -282,7 +277,7 @@ namespace Demech2
         {
             if ((PowerState == 4 && m_onGround) || (m_flags & 0x100) != 0) return;
             bool resim = g_resimulating;
-            // A MekNet client: the host's reported heat (NetMatchDriver) joins the step's.
+            // A networked client: the host's reported heat joins the step's.
             if (!resim)
             {
                 m_deltaHeat = m_pendingNetHeat;
@@ -309,7 +304,7 @@ namespace Demech2
                 int vx = m_velocityX, vy = m_velocityY, vz = m_velocityZ;
                 int accelX = 0, accelY = -m_gravity, accelZ = 0;
                 int dragX = 0, dragZ = 0;
-                // Not in the original (ShutdownStopsJets): a mech that isn't running drifts as if the jets' key were let up.
+                // ShutdownStopsJets: a mech that isn't running drifts as if the jets' key were let up.
                 bool jets = m_steering["jets.on"] != 0 && !(ShutdownStopsJets && PowerState != 2);
                 if (m_onGround && (!jets || m_jumpFuel <= 0))
                 {
@@ -351,8 +346,7 @@ namespace Demech2
                     vx = m_velocityX;
                     vz = m_velocityZ;
                     int drag = 0;
-                    // GBL's lift drag scale is 0xe38 (GblUpdateMech 0x270aa), 31cc's 0xe24.
-                    int liftDrag = Host.Variant.IsGhostBearsLegacy && !Host.Net.NetRules ? 0xe38 : 0xe24;
+                    int liftDrag = Host.Mechs.LiftDrag;
                     if (vy > 0) drag = Fixed.Mul16((m_gravity - m_jumpThrust) * liftDrag, vy) / Host.World.JumpJetDrag;
                     accelY += m_jumpThrust + drag;
                     if (m_steering["turn"] != 0)
@@ -480,19 +474,12 @@ namespace Demech2
                         motion.m_animFlags |= 4;
                     }
 
-                    m_fallSoundPlayed = false; // Titanium FUN_100388bd: 0xe42 &= 0xfff7
+                    Host.Mechs.Airborne(this);
                 }
                 else
                 {
                     if (motion != null) motion.m_animFlags &= ~4u;
-                    // Titanium FUN_100388bd 0x1003a008: MECHFALL once when the airborne bit clears and & 8 isn't set; sets
-                    // & 8. Assumed: & 8 maps to fallSoundPlayed, cleared by the airborne branch above.
-                    if (Host.Variant.IsTitanium && !m_fallSoundPlayed && !resim)
-                    {
-                        m_fallSoundPlayed = true;
-                        int fall = Host.Sound.FindSoundResource("MECHFALL");
-                        if (fall > 0) EffectSound.PlaySoundAt(EyeOffset(), fall, Eyepoint.g_inCockpitView);
-                    }
+                    Host.Mechs.Grounded(this, resim);
                     if (heightAbove <= 0)
                     {
                         m_onGround = true;
@@ -533,8 +520,7 @@ namespace Demech2
 
                 SeparateFromMechs(dt, ref x, y, ref z);
                 m_positionX = x;
-                // Ghost Bear's Legacy (UpdateMech 0x26d00): a truck (GP_MW2TRUCK, type 2) is pinned to the ground plane.
-                if (Host.Variant.IsGhostBearsLegacy && m_type == 2) y = m_height;
+                y = Host.Mechs.PinnedHeight(this, y);
                 m_positionY = y;
                 m_positionZ = z;
                 m_heading += m_turnRate.m_value * dt / 0xb5;
@@ -610,12 +596,7 @@ namespace Demech2
             if (PowerState == 2)
             {
                 UpdateWeaponFireState();
-                // Titanium (0x1003a4f9): fire, then cycle the group (FIRE_CYCLE_WEAPON_GROUP).
-                if (WeaponDef.Titanium && m_steering.Pressed("arms.group.next") && IsPilot && m_steering.Pressed("arms.fire.group"))
-                {
-                    CycleLocalWeaponGroup();
-                    m_steering["arms.group.next"] = 0;
-                }
+                Host.Weapons.AfterFireState(this);
             }
 
             UpdateAI();
@@ -721,7 +702,7 @@ namespace Demech2
                 if (kmh != 0 || (IsPilot && m_mobility > 0))
                 {
                     if (kmh > 0x50) kmh = 0x50;
-                    // Mercenaries' UpdateMech 0x10020f5c turns player types 2 and 8 at 0xb4; Mercs uses the 31CC/GBL rate for now.
+
                     int rate = m_steering["turn"] / 1024 * 90;
                     m_turnRate.m_target = (int)((long)rate * Fixed.Cos(kmh << 16) / 65536);
                 }
@@ -749,12 +730,7 @@ namespace Demech2
                                 TimedOverlays.ShowInGameMessage("MASC malfunction.", 1, 0x16a, 0x32);
                                 CockpitSound.PlaySoundEffect(Host.Anim.MapSoundId(0xc9), 100, 0x40, 5, 0x50);
                             }
-                            // Titanium's adds half (heat / _DAT_10087f74, 2.0), the classic's and Mercenaries' a quarter.
-#if UNITY_EDITOR || MEKENGINE_MERCS
-                            m_heat += WeaponDef.Titanium && !WeaponDef.Mercs ? m_heat >> 1 : m_heat >> 2;
-#else
-                            Heat += WeaponDef.Titanium ? Heat >> 1 : Heat >> 2;
-#endif
+                            m_heat += Host.Mechs.MascHeat(m_heat);
                             m_mascEngaged = false;
                         }
                     }
@@ -863,12 +839,7 @@ namespace Demech2
                     break;
                 case 3:
                     PlayerFlags |= 0x10;
-                    // Titanium: a NARC beacon stops working ten seconds into a shutdown.
-#if UNITY_EDITOR || MEKENGINE_MERCS
-                    if (WeaponDef.Titanium && !WeaponDef.Mercs && Clock.g_currentClock - m_stateTime > 0x712 && m_narced) m_narced = false;
-#else
-                    if (WeaponDef.Titanium && Clock.g_currentClock - stateTime > 0x712 && Narced) Narced = false;
-#endif
+                    Host.Mechs.ShutDownTick(this);
                     break;
                 case 4:
                     PlayerFlags &= ~0x2000;
@@ -1104,8 +1075,7 @@ namespace Demech2
                         m_steering["arms.next"] = 0;
                     }
 
-                    // Titanium (0x1003b88d) leaves a cycle with the group's trigger to the fire state's.
-                    if (m_steering.Pressed("arms.group.next") && !(WeaponDef.Titanium && m_steering.Pressed("arms.fire.group")))
+                    if (m_steering.Pressed("arms.group.next") && !Host.Weapons.KeepsGroupCycle(this))
                     {
                         CycleLocalWeaponGroup();
                         m_steering["arms.group.next"] = 0;

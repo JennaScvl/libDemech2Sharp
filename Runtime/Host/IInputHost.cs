@@ -36,7 +36,7 @@ namespace Demech2
         bool TimeCompressionKey { get; }
         bool TimeCompression { get; set; }
 
-        // Titanium's SquadRollCall for the STARMATE_* keys; the targets dropped (the reset targeting key).
+        // The game's SquadRollCall for the STARMATE_* keys; the targets dropped (the reset targeting key).
         void SquadRollCall(int p_which);
         void DropTargets();
 
@@ -56,7 +56,7 @@ namespace Demech2
         bool MouseTurn(InputMap.InputSource p_input, int p_range, int p_sign, out long p_turn);
 
         // Not the original's: the game keys run every rendered frame (a lockstep capturing this machine's input); the
-        // local mech lost in a MekNet match (only its own keys run); a menu took the input's key.
+        // local mech lost in a networked match (only its own keys run); a menu took the input's key.
         bool KeysPerFrame { get; }
         bool DeadInMatch { get; }
         bool KeyTaken(InputMap.InputSource p_input);

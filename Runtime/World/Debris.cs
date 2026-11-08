@@ -50,7 +50,7 @@ namespace Demech2
         public static int g_gravity = 0x794;
         public static long g_gravityScale = 0x10000;
 
-        // g_localMechLost: the local mech is gone (chunks then stay, outside a MekNet match).
+        // g_localMechLost: the local mech is gone (chunks then stay, outside a networked match).
         public static bool g_localMechLost;
 
         // SetGravity: the planet's gravity in g (16.16).
@@ -339,7 +339,7 @@ namespace Demech2
 
             for (int i = 0; i < Count; i++)
             {
-                // g_localMechLost keeps the chunks; in a MekNet match whose it is differs by machine, so not there.
+                // g_localMechLost keeps the chunks; in a networked match whose it is differs by machine, so not there.
                 if (g_debrisChunks[i].m_active && Clock.g_currentClock - g_debrisChunks[i].m_startTime > ChunkLifetime && !(g_localMechLost && !Host.Net.NetRules))
                 {
                     DisposeDebris(g_debrisChunks[i].m_obj, g_debrisChunks[i].m_callback);

@@ -328,25 +328,25 @@ namespace Demech2
                 case 0x9e:
                     Steer("arms.fire.group3");
                     break;
-                // Titanium's: groups 4 and 5 (SetSelectedWeaponGroup unclamped), fire all (+0x2d), fire and cycle the group
-                // (+0x27 and +0x2b), the AMS (FUN_1000cc90).
+                // Groups 4 and 5 (SetSelectedWeaponGroup unclamped), fire all, fire and cycle the group, the AMS: the
+                // host's weapon rules' (Host.Weapons).
                 case AddWeaponToGroup4:
                 case AddWeaponToGroup5:
                     Host.Cockpit.IssuePilotCommand(PilotCommand.SetWeaponGroup, action - AddWeaponToGroup4 + 3);
                     break;
-                // MekEngine's: fire groups 4 and 5, every edition.
+                // Fire groups 4 and 5.
                 case FireWeaponGroup4:
                     Steer("arms.fire.group4");
                     break;
                 case FireWeaponGroup5:
                     Steer("arms.fire.group5");
                     break;
-                // Fire all: every edition (MekEngine's).
+                // Fire all.
                 case FireAllWeapons:
                     Steer("arms.fire.all");
                     break;
                 case FireCycleWeaponGroup:
-                    if (WeaponDef.Titanium)
+                    if (Host.Weapons.FireCyclesGroup)
                     {
                         Steer("arms.fire.group");
                         Steer("arms.group.next");
@@ -354,13 +354,13 @@ namespace Demech2
 
                     break;
                 case ToggleAms:
-                    if (WeaponDef.Titanium) Host.Cockpit.IssuePilotCommand(PilotCommand.ToggleAms, 0);
+                    if (Host.Weapons.TogglesAms) Host.Cockpit.IssuePilotCommand(PilotCommand.ToggleAms, 0);
                     break;
-                // Titanium's: SquadRollCall (the mate it picks for the STARMATE_* order keys, DAT_100a6328, not ported).
+                // The host's SquadRollCall (the mate it picks for the STARMATE_* order keys).
                 case StarmateSetAll:
                 case StarmateSetPt2:
                 case StarmateSetPt3:
-                    if (Host.Variant.IsTitanium) Host.Input.SquadRollCall(action - StarmateSetAll);
+                    Host.Input.SquadRollCall(action - StarmateSetAll);
                     break;
                 default:
                     if (action >= 0x1a && action <= 0x23) step = action - 0x1a;

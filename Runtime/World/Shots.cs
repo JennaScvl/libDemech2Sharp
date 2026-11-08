@@ -12,7 +12,7 @@ namespace Demech2
         public FixVec m_position;        // 16.16 units: where it is (its object shows it)
         public FixVec m_velocity;        // 16.16 units a tick
         public FixVec m_steering;        // 16.16 units a tick, a tick: gravity, and a missile's turn toward its target
-        public bool m_runaway;           // its steering ran away (Titanium's torpedo, as written): the floats' NaN
+        public bool m_runaway;           // its steering ran away: the floats' NaN
         public int m_age, m_lifetime;    // ticks
         public int m_swayPhase;
         public ISceneObject m_object;    // its shape (a booyowthing record's), hidden until fired
@@ -24,30 +24,22 @@ namespace Demech2
         public int m_weapon = -1;        // its weapon type
         public int m_damage, m_heat;     // 16.16
         public bool m_tracked;           // the tracked shot's view follows it
-        public int m_defFlags;           // Titanium's [1]: its weapon's flags (WeaponDef.Flag...)
-        public int m_amsDistance = -1;   // Titanium's [0x18]: the distance (units) an AMS sets it off at; below 0 not yet rolled
-#if UNITY_EDITOR || MEKENGINE_MERCS
-        public bool m_volleyLight;       // Mercenaries' [0x16]: a volley's first shot carries a light (range 10000)
-#endif
+        public object m_ext;             // the host's data for this slot, or null (Host.Weapons.ResetShot clears it)
     }
 
     // The shots (shots.c: FirstShots, ResetShotSlot, UpdateAllShots, UpdateShot, GuideMissileToTarget, DetonateShot,
     // TrackLastShot, GetTrackedShotView, DamageGameThing, KillGameThing, DamageThingsInRadius; world.c's booyowthing
-    // records), the Matrox edition's floats as the lockstep's fixed point (Fixed): 0xaf slots, each the object of a
+    // records), the floats as the lockstep's fixed point (Fixed): 0xaf slots, each the object of a
     // booyowthing record and its shot type, launched by SpawnShot (Mech). Each tick a shot moves on (gravity, a
     // missile's steering) and the segment it covered is tested against the world (TestSegmentCollision, its shooter's own
     // parts left out): a hit damages the mech part, the game thing or the chunk it hit and sets off the shot's effect,
-    // just short of the point of impact. A shot whose time runs out vanishes. Titanium (mercsw.dll g_shots 0x1023c960):
-    // 0xff slots; missiles are types 3, 4, 9 (torpedo), 10 (Arrow IV) and 12 (NARC); a NARC tags the mech it hits; a
-    // homing missile aims 5% short inside 3000 units, a torpedo (flag 0x10) eases its steering; the ground stops a shot
-    // 25 units below its height. Mercenaries (DOS-Win95 MERCSW.DLL) has Titanium's slots and missiles, the ground at its
-    // height, no 5% shortfall and the torpedo easing by dt / 0x2d4 (UpdateShotGuidance 0x1004a6cc); a volley's first shot
-    // carries a light. The slots' objects are the game's (Host.Fx).
+    // just short of the point of impact. A shot whose time runs out vanishes. The missiles, the ground's stop, a hit's
+    // additions and a missile's steering are the host's to change (Host.Weapons). The slots' objects are the game's
+    // (Host.Fx).
     public static class Shots
     {
-        // The originals' fixed pools (0xaf; Titanium's and GBL's 0xff, MW2.flat 0x53820) were the 486's limit, not a
-        // design: here the pool starts at 0xff and grows a slot of a type's shape whenever every slot of it is in
-        // flight (the game's Host.Fx.GrowShot).
+        // The original's fixed pool (0xaf) was the 486's limit, not a design: here the pool starts at 0xff and grows a
+        // slot of a type's shape whenever every slot of it is in flight (the game's Host.Fx.GrowShot).
         public const int c_initialSlots = 0xff;
         public static int SlotCount => g_shots.Length;
         public const int c_proximityFuse = 0x8000;
@@ -56,10 +48,8 @@ namespace Demech2
         public static Shot[] g_shots = new Shot[c_initialSlots];
         public static int s_loadedSlots = c_initialSlots; // the slots before any grew (the rest are hashed only in flight)
 
-        // The missile types: the launch's spread, the missile view, the AMS's targets.
-        public static bool IsMissile(int p_type) =>
-            p_type == 3 || p_type == 4 ||
-            ((WeaponDef.Titanium || Host.Variant.IsGhostBearsLegacy) && (p_type == 9 || p_type == 10 || p_type == 12));
+        // The missile types (3 and 4, and the host's): the launch's spread, the missile view.
+        public static bool IsMissile(int p_type) => p_type == 3 || p_type == 4 || Host.Weapons.IsMissile(p_type);
         public static int g_nextShotRecord;
 
         // g_lastLocalMissile: the local player's last missile's slot, or -1; g_trackedShot and its view.
@@ -103,14 +93,10 @@ namespace Demech2
             shot.m_unk0x3c = 0;
             shot.m_damage = shot.m_heat = 0;
             shot.m_tracked = false;
-            shot.m_defFlags = 0;
-            shot.m_amsDistance = -1;
-#if UNITY_EDITOR || MEKENGINE_MERCS
-            shot.m_volleyLight = false;
-#endif
+            Host.Weapons.ResetShot(shot);
         }
 
-        // Not the original's: a new empty slot at the end of the pool.
+        // A new empty slot at the end of the pool.
         public static int AppendSlot()
         {
             int index = g_shots.Length;
@@ -126,7 +112,7 @@ namespace Demech2
         public static bool Hashed(int p_index) => p_index < s_loadedSlots || g_shots[p_index].m_flags != 0;
 
         // SpawnShot's search: the first slot of shot type p_type that isn't flying and has an object, else a new one
-        // (p_visualType: the shape it borrows in a MekNet match when the world has none of p_type).
+        // (p_visualType: the shape it borrows when the world has none of p_type).
         public static int FindFree(int p_type, int p_visualType = -1)
         {
             int index = FindFreeSlot(p_type, p_visualType);
@@ -146,7 +132,7 @@ namespace Demech2
             return Host.Fx.GrowShot(p_type, p_visualType);
         }
 
-        // Not in the original: a MekNet reported volley's catch-up (Mech.FireWeapons' catch-up): the shots launched
+        // A networked match's reported volley's catch-up (UpdateWeaponFireState's): the shots launched
         // between BeginCapture and CatchUpCaptured flown on p_ticks at once, a step at most at a time, hitting as they
         // would have (the damage the host's alone).
         static bool s_capturing;
@@ -185,9 +171,7 @@ namespace Demech2
         // UpdateAllShots: every shot in flight ages and moves on.
         public static void UpdateAllShots()
         {
-#if UNITY_EDITOR || MEKENGINE_MERCS
             Host.Fx.UpdateTracers();
-#endif
             if (g_shots[0] == null) return;
             for (int i = 0; i < SlotCount; i++)
             {
@@ -207,8 +191,7 @@ namespace Demech2
         {
             Shot shot = g_shots[p_index];
             int dt = p_dt;
-            // A torpedo whose steering ran away (Titanium's, as written) flies on unseen, its floats no longer numbers,
-            // until its time runs out.
+            // A shot whose steering ran away flies on unseen, its floats no longer numbers, until its time runs out.
             if (shot.m_runaway)
             {
                 shot.m_object.Show(false);
@@ -282,12 +265,7 @@ namespace Demech2
             else if (at.Y < 0)
             {
                 long ground = SimMain.g_terrain != null ? SimMain.g_terrain.GetTerrainHeight(at) : 0;
-                // Titanium: 25 units below the ground (_DAT_10087184).
-#if UNITY_EDITOR || MEKENGINE_MERCS
-                if (at.Y < (WeaponDef.Titanium && !WeaponDef.Mercs ? ground - (25L << 16) : ground))
-#else
-                if (at.Y < (WeaponDef.Titanium ? ground - (25L << 16) : ground))
-#endif
+                if (at.Y < Host.Weapons.ShotGroundStop(ground))
                 {
                     hitResult = true;
                     shot.m_impact |= Effects.c_impactGround;
@@ -322,15 +300,7 @@ namespace Demech2
             Mech mech = SimMain.MechOf(victim);
             p_shot.m_impact |= Effects.c_impactMech;
             if (p_shot.m_type == 7) p_shot.m_impact |= 0x1000;
-            // Titanium's NARC (flag 0x80): the mech is tagged; the shooter and the victim hear of it.
-            if ((p_shot.m_defFlags & WeaponDef.FlagNarc) != 0)
-            {
-                if (mech != null) mech.m_narced = true;
-                // GBL (MW2.flat 0x5193e) only tags the mech (+0x112 |= 1), with no cockpit sounds.
-                if (Host.Variant.IsGhostBearsLegacy) { }
-                else if (p_shot.m_shooter == SimMain.g_localPlayerId) MissionSpeech.PlayCockpitSound(0x24, -1);
-                else if (victim == SimMain.g_localPlayerId) MissionSpeech.PlayCockpitSound(0x25, -1);
-            }
+            Host.Weapons.ShotHitMech(p_shot, mech, victim);
 
             if (mech != null)
             {
@@ -352,42 +322,26 @@ namespace Demech2
 
             if (victim == SimMain.g_localPlayerId) CameraShake.PlayPlayerHitFeedback(p_velocity.ToFloat(), Host.Fx.RenderTicks);
 
-            // RecordAttack: the shooter's AI goal (the user's); the Matrox edition damages after it.
+            // RecordAttack: the shooter's AI goal (the user's); the damage after it.
             Mech.RecordAttack(p_shot.m_shooter, victim);
             if (mech != null)
             {
-                // A MekNet match: the host's alone, reported.
+                // A networked match: the host's alone, reported.
                 if (Host.Net.DamagesHere)
                 {
                     mech.m_deltaHeat += p_shot.m_heat;
                     Host.Net.Heated(mech, p_shot.m_heat);
-                    PpcHit(p_shot, mech);
+                    Host.Weapons.ShotHeatedMech(p_shot, mech);
                 }
 
                 mech.ApplyDamage(p_shot.m_shooter, p_shot.m_damage, p_hit.PartId | p_damageFlags);
             }
         }
 
-        // Not in the original, MoonBunny Edition's (MoonBunnyActive): the SLDF Field Damper (MechConfig.m_damperRemoved).
-        // A PPC's hit on a mech without one (1 in 40 with one) drops its lock and keeps it off: 3 seconds, a Clan PPC's
-        // on an Inner Sphere mech 5, an Inner Sphere PPC's on a Clan mech 1. A MekNet match: the host's alone, reported
-        // (LockJam).
-        public static void PpcHit(Shot p_shot, Mech p_mech)
-        {
-            if (!Host.Variant.MoonBunnyActive) return;
-            string name = WeaponDef.Of(p_shot.m_weapon).m_name;
-            if (name == null || name.IndexOf("PPC", StringComparison.OrdinalIgnoreCase) < 0) return;
-            if (p_mech.m_config != null && !p_mech.m_config.m_damperRemoved && SimRandom.RandomIntBelow(40) != 0) return;
-            // The catalog's (and every game's table's) Clan types come first.
-            bool clanPpc = p_shot.m_weapon < Host.Variant.ClanWeaponCount;
-            int seconds = clanPpc && p_mech.InnerSphere ? 5 : !clanPpc && !p_mech.InnerSphere ? 1 : 3;
-            int ticks = seconds * Clock.TicksPerSecond;
-            p_mech.JamLock(ticks);
-            Host.Net.LockJam(p_mech, ticks);
-        }
+
 
         // Past this (16.16 units a tick, a tick) the floats' steering soon runs to infinity: m_runaway.
-        const long c_runawaySteering = 1L << 50;
+        public const long c_runawaySteering = 1L << 50;
 
         // GuideMissileToTarget: the steering toward the target (a player not destroyed, a game thing standing; else the
         // missile flies on unguided), the proximity fuse armed within 100 units, the missile turned along its flight.
@@ -427,12 +381,7 @@ namespace Demech2
             }
 
             FixVec d = target - p_at;
-#if UNITY_EDITOR || MEKENGINE_MERCS
-            bool titanium = WeaponDef.Titanium && !WeaponDef.Mercs;
-#else
-            bool titanium = WeaponDef.Titanium;
-#endif
-            long distance = titanium ? d.Length : d.ApproxLength;
+            long distance = Host.Weapons.MissileDistance(p_shot, d);
             if (distance <= 100L << 16) p_shot.m_flags |= c_proximityFuse;
             // On the target itself the floats' direction is 0 / 0: no longer numbers.
             if (distance == 0)
@@ -442,39 +391,11 @@ namespace Demech2
             }
 
             d = d.Div(distance);
-            // Titanium (0x10011b0e): inside 3000 units the aim falls 5% short.
-            if (titanium && distance < 3000L << 16) d = d.Mul(62259); // 0.95
+            d = Host.Weapons.MissileAim(p_shot, d, distance);
             FixVec v = p_shot.m_velocity.NormalizeGuarded();
-            if (titanium && (p_shot.m_defFlags & WeaponDef.FlagTorpedo) != 0)
-            {
-                // The torpedo eases toward the turn by dt * 4 * 181 (an integer factor, as written; over 2 it
-                // overshoots, growing until the floats' run to infinity: m_runaway).
-                int ease = p_dt * 4 * 0xb5;
-                FixVec turn = d - v - p_shot.m_steering;
-                long limit = c_runawaySteering / ease;
-                if (Math.Abs(turn.X) > limit || Math.Abs(turn.Y) > limit || Math.Abs(turn.Z) > limit)
-                {
-                    p_shot.m_runaway = true;
-                    return;
-                }
-
-                p_shot.m_steering += new FixVec(turn.X * ease, turn.Y * ease, turn.Z * ease);
-            }
-#if UNITY_EDITOR || MEKENGINE_MERCS
-            else if (WeaponDef.Mercs && (p_shot.m_defFlags & WeaponDef.FlagTorpedo) != 0)
-            {
-                // Mercenaries (0x1004a6cc): the torpedo eases toward the turn by FixDiv(dt, 0x2d4).
-                int ease = Fixed.Div16(p_dt, 0x2d4);
-                p_shot.m_steering += (d - v - p_shot.m_steering).Mul(ease);
-            }
-#endif
-            else if (Host.Variant.IsGhostBearsLegacy && (p_shot.m_defFlags & WeaponDef.FlagTorpedo) != 0)
-            {
-                // GBL (MW2.flat 0x51cd0): the torpedo eases toward the turn by dt / 0x2d8.
-                int ease = Fixed.Div16(p_dt, 0x2d8);
-                p_shot.m_steering += (d - v - p_shot.m_steering).Mul(ease);
-            }
-            else p_shot.m_steering = d - v;
+            int steered = Host.Weapons.SteerMissile(p_shot, d, v, p_dt);
+            if (steered == 2) return;
+            if (steered == 0) p_shot.m_steering = d - v;
             int heading = Fixed.Heading(v.X, v.Z);
             int pitch = -Fixed.Asin(v.Y);
             p_shot.m_object.SetRotation(Quaternion.Euler(pitch / 65536f, heading / 65536f, 0));
@@ -495,7 +416,7 @@ namespace Demech2
             int shooter = shot.m_shooter;
             object impactFx = Host.Fx.ImpactFxFor(shot.m_weapon);
             // A missile's (guided, or a torpedo) impact is an explosion's sound (Effects.g_explosionSound).
-            bool missile = (shot.m_weapon >= 0 && WeaponDef.Of(shot.m_weapon).m_guided != 0) || (shot.m_defFlags & WeaponDef.FlagTorpedo) != 0;
+            bool missile = (shot.m_weapon >= 0 && WeaponDef.Of(shot.m_weapon).m_guided != 0) || Host.Weapons.ExplodesAsMissile(shot);
             ResetShotSlot(p_index);
             if (!p_explode) return;
             Effects.g_impactFx = impactFx;
@@ -541,7 +462,7 @@ namespace Demech2
         // DamageGameThing: p_damage (16.16; its whole points) off the hit points of the thing p_shape belongs to; when
         // they run out, it blows up (a mine-like 0xb0 shape with effect 0xd, else 3 and debris) and is destroyed. p_at
         // 16.16 units.
-        // Not in the original: a MekNet match's is the host's alone, each reported.
+        // A networked match's is the host's alone, each reported.
         public static void DamageGameThing(World p_world, int p_owner, Shape p_shape, int p_damage, FixVec p_at)
         {
             if (p_shape == null || !Host.Net.DamagesHere) return;

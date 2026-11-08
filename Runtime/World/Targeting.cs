@@ -4,7 +4,7 @@ using UnityEngine;
 namespace Demech2
 {
     // Targets (targeting.c: CycleTarget, TargetNavPoint, TargetGamePiece, TargetGameThing, UpdateTarget,
-    // TargetAtReticle, TargetNearestEnemy, GetBearingAndRange and the cycles; lineofsight.c), the Matrox edition's floats
+    // TargetAtReticle, TargetNearestEnemy, GetBearingAndRange and the cycles; lineofsight.c), the original's floats
     // as the lockstep's fixed point (Fixed): a player's target (PlayerTargetInfo) is a nav point, a player or a game thing,
     // which it cycles through in that ring, and where it is from the player. The local player may only pick what its
     // radar shows (flags 0x1400) within 0x2ab98 units, unless it picked it at the reticle. Reaching a nav marks it
@@ -23,7 +23,7 @@ namespace Demech2
         // result's sound plays once rather than every rendered frame until the next step, nor is lost to a catch-up step.
         public static int s_inspectShown;
 
-        static bool Titanium => Host.Variant.IsTitanium;
+
 
         // CycleTarget: p_step places on through the navs, the players and the game things; with p_step 0 (or a lost
         // target) from the first player. The target is lost (0x1000) when none qualifies.
@@ -105,12 +105,12 @@ namespace Demech2
             if (found)
             {
                 p_mech.m_targetInfo.m_target = kind | index;
-                if (Titanium && kind == 0x100) p_mech.m_routeInfo.m_target = index | 0x100;
+                if (kind == 0x100) Host.Mechs.RouteNavTargeted(p_mech, index);
             }
             else p_mech.m_targetInfo.m_target |= 0x1000;
 
-            // Titanium (0x10066e47): the autopilot keeps on while the route has a nav, whatever's targeted.
-            if ((Titanium ? (p_mech.m_routeInfo.m_target & 0x100) == 0 : kind != 0x100) && p_mech.m_autopilot != 0) p_mech.m_steering["mech.autopilot"] = 1;
+            // The autopilot stops on a target that isn't a nav (or as the host's route says).
+            if (Host.Mechs.AutopilotDrops(p_mech, kind) && p_mech.m_autopilot != 0) p_mech.m_steering["mech.autopilot"] = 1;
         }
 
         // Writes the target's place, bearing, distances and pitch.
@@ -146,7 +146,7 @@ namespace Demech2
             if (p_mech.m_player.m_team != nav.m_team) return -6;
             if (nav.m_obj != null) nav.m_position = NodeUnits(nav.m_obj);
             SetInfo(p_mech, nav.m_position);
-            if (Titanium) p_mech.m_routeInfo.CopyPlace(p_mech.m_targetInfo);
+            Host.Mechs.RouteNavPlaced(p_mech);
             return 1;
         }
 
@@ -313,7 +313,7 @@ namespace Demech2
                 if (target != -1 && mech.m_targetInfo.m_target != target)
                 {
                     mech.m_targetInfo.m_target = target;
-                    if (mech.m_autopilot != 0 && (!Titanium || (mech.m_routeInfo.m_target & 0x100) == 0)) mech.m_steering["mech.autopilot"] = 1;
+                    if (mech.m_autopilot != 0 && Host.Mechs.AutopilotDrops(mech, -1)) mech.m_steering["mech.autopilot"] = 1;
                     if (!UpdateTarget(mech))
                     {
                         mech.m_targetInfo.m_target = previous;

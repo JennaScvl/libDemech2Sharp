@@ -3,8 +3,7 @@ using UnityEngine;
 namespace Demech2
 {
     // What the sim asks of the game's world and records: the career record (the local player's), the scene's static
-    // objects behind the game things, the planet's settings, Mercenaries' objective quirks, Titanium's squad voices,
-    // Mech Soccer's ball.
+    // objects behind the game things, the planet's settings, the squad's speech, Mech Soccer's ball.
     public interface IWorldHost
     {
         // ---- g_careerRecord (the game's): a shot fired (the local player's, its star's); a hit on p_victim (by the
@@ -23,9 +22,6 @@ namespace Demech2
 
         // g_killCount (the local view's).
         int KillCount { get; set; }
-
-        // Mercenaries' AddSalvageMech (KillMech): the player's mech and configuration to the dynamic salvage.
-        void AddSalvageMech(Player p_player, MechConfig p_config);
 
         // LoadMechConfig (mekfile.c) for p_player: the local one's when p_local, else of side p_side; null without its
         // file.
@@ -61,20 +57,8 @@ namespace Demech2
         bool InertDiagEnabled { get; }
         void DebugDumpMechs(string p_when);
 
-        // ---- Mercenaries' objectives (MERCSW.DLL): the map's game is Mercenaries; IsTeamNearTarget from the team's
-        // leader alone; a table's slot (past its objectives too); AnnounceObjective with its text; the mission and the
-        // objective a type 0x10000 and up acts on; 0x400000's stale announcement cleared. ----
-        bool MercsObjectives { get; }
-        bool MercsIsTeamNearTarget(int p_target, int p_team);
-        MissionObjective MercsSlot(int p_star, int p_index);
-        void SayMercsObjective(MissionObjective p_objective, int p_state);
-        MissionTable MercsTargetMissionOf(MissionObjective p_objective);
-        MissionObjective MercsTargetObjectiveOf(MissionObjective p_objective);
-        void MercsClearAnnounced(int p_index);
-
-        // ---- Titanium's squad voices (SetSquadVoice, SquadEventSpeech) ----
-        void SetSquadVoice(int p_slot, int p_group);
-        void SquadEventSpeech(int p_event, int p_slot);
+        // ---- The squad's speech: the game's line for a lancemate report or event (true when it said one) ----
+        bool SquadEventSpeech(int p_event, int p_slot);
 
         // ---- Not in the original: Mech Soccer's ball takes a shot's segment, and a splash pushes it ----
         bool SoccerActive { get; }

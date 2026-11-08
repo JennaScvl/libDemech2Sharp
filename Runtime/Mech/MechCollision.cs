@@ -27,7 +27,7 @@ namespace Demech2
             p_y = y1;
             p_z = z1;
             bool hit = false;
-            // Not in the original (ShutdownStopsJets): a mech shut down or powering up collides too.
+            // ShutdownStopsJets: a mech shut down or powering up collides too.
             bool shutDown = PowerState == 0 || PowerState == 1 || PowerState == 3;
             if (PowerState != 2 && PowerState != 4 && !(ShutdownStopsJets && shutDown))
             {
@@ -141,7 +141,7 @@ namespace Demech2
                 int reach = mech.m_radius + m_radius;
                 int dist = ApproxLen.ApproximateVectorLength(dx, dy, dz);
                 if (!first && dist >= reach) continue;
-                // A MekNet respawn's overlap: SeparateFromMechs slides them apart instead.
+                // A respawn's overlap: SeparateFromMechs slides them apart instead.
                 if (m_separating || mech.m_separating) continue;
 
                 if (mech.PowerState == 4) mech.KnockMechOver();
@@ -223,7 +223,7 @@ namespace Demech2
             return false;
         }
 
-        // Respawn separation (not in the original; MekNet only, NetMatchDriver.ApplyRespawn): a respawned mech overlapping
+        // Respawn separation (a networked match's respawn): a respawned mech overlapping
         // another isn't snapped out by CollideWithMechs; both slide apart flat, a mech's reach a second, until it's clear.
         // Collision damage between it and other mechs is off for RespawnGraceTicks.
         public const int RespawnGraceTicks = 2 * Clock.TicksPerSecond;

@@ -6,7 +6,7 @@ namespace Demech2
     // g_mechPoweredUp, g_aimedShape...): the world whose players fight, and each player's mech.
     public static class SimMain
     {
-        // g_localPlayerId: the first gpspec in single player; in a MekNet match the gpspec the handoff didn't mark
+        // g_localPlayerId: the first gpspec in single player; in a networked match the gpspec the handoff didn't mark
         // remote. Back to 0 at End.
         public static int g_localPlayerId = 0;
 

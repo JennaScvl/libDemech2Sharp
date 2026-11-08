@@ -43,11 +43,10 @@ namespace Demech2
         // ---- Weapon panels (weaponpanel.c) ------------------------------------------------------------------------
 
         // DrawWeaponPanel: the weapon's name and ammunition, in its state's color (its group's while ready), framed
-        // while it's selected. Titanium (0x1006bb50) gates on the weapon list's toggle, and has groups 4 and 5 (MekEngine's
-        // in every edition, and AutoGroupWeapons' 6 and 7).
+        // while it's selected; whether it shows and its text a derived cockpit's (WeaponPanelShown, WeaponPanelText).
         void DrawWeaponPanel(Panel p_panel)
         {
-            if (!(Titanium ? tiWeaponsShown : p_panel.Enabled) || p_panel.Weapon < 0 || mech.Config == null) return;
+            if (!WeaponPanelShown(p_panel) || p_panel.Weapon < 0 || mech.Config == null) return;
             WeaponSlot weapon = mech.Config.m_weapons[p_panel.Weapon];
             if (weapon.m_type < 0) return;
 
@@ -75,10 +74,7 @@ namespace Demech2
             if (font != null)
             {
                 Art.g_textColors[0xe] = color;
-                // Titanium: a pooled weapon shows its pool's shots.
-                string text;
-                if (Titanium) text = weapon.m_pool == WeaponSlot.NoPool ? p_panel.Name : $"{p_panel.Name} {mech.Config.AmmoOf(weapon)}";
-                else text = weapon.m_ammo < 0 ? p_panel.Name : $"{p_panel.Name} {weapon.m_ammo}";
+                string text = WeaponPanelText(p_panel, weapon);
                 if (arcGlitch) text = ScrambleText(text, p_panel.Weapon);
                 hud.String(p_panel.Target, p_panel.TextX, p_panel.TextY, font, text, Art.g_textColors);
                 Art.g_textColors[0xe] = 0xe;
@@ -131,16 +127,16 @@ namespace Demech2
                 switch (p_priority)
                 {
                     case 1:
-                        label = Titanium ? "Target: " : "Primary: ";
+                        label = ObjectiveWord("Primary: ");
                         break;
                     case 2:
-                        label = Titanium ? "Bonus: " : "Secondary: ";
+                        label = ObjectiveWord("Secondary: ");
                         break;
                     case 8:
                         label = "Return: ";
                         break;
                     default:
-                        label = Titanium ? "Bounty: " : "Tertiary: ";
+                        label = ObjectiveWord("Tertiary: ");
                         break;
                 }
 
@@ -167,11 +163,11 @@ namespace Demech2
                 switch (objective.State)
                 {
                     case 5:
-                        text = Titanium ? "Complete" : "Successful";
+                        text = ObjectiveWord("Successful");
                         color = 7;
                         break;
                     case 6:
-                        text = Titanium ? "InComplete" : "Failed";
+                        text = ObjectiveWord("Failed");
                         color = 0xb;
                         break;
                     default:
@@ -233,7 +229,7 @@ namespace Demech2
         }
 
         // DrawNetworkPanel: the network's messages and chat. Single player has neither: it draws nothing.
-        // Mech Soccer's score where the cockpit has no kills panel (Ghost Bear's Legacy).
+        // Mech Soccer's score where the cockpit has no kills panel.
         protected void DrawNetworkPanel(Panel p_panel)
         {
             if (PanelKills < 0) DrawKillsPanel(p_panel);

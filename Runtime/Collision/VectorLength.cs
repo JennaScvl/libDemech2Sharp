@@ -48,7 +48,7 @@ namespace Demech2
         public static bool IsNegative(float p_value) => BitConverter.SingleToInt32Bits(p_value) < 0;
     }
 
-    // IsWithinRadius (demech2 MW2/src/inradius.c, and the Matrox edition's inline copies).
+    // IsWithinRadius (demech2 MW2/src/inradius.c, and its inline copies).
     public static class InRadius
     {
         // inradius.c: the squares compared unsigned; a sum at or above the radius's square counts as inside when their
@@ -60,11 +60,11 @@ namespace Demech2
             return sum < square || (uint)(sum - square) == 0;
         }
 
-        // Matrox, inline: render side's floats.
+        // Inline: render side's floats.
         public static bool IsWithinRadius(float p_x, float p_y, float p_z, float p_radius) =>
             p_x * p_x + p_y * p_y + p_z * p_z <= p_radius * p_radius;
 
-        // Matrox, inline: 16.16 units.
+        // Inline: 16.16 units.
         public static bool IsWithinRadius(FixVec p_d, long p_radius) => FixVec.Dot(p_d, p_d) <= Fixed.Mul16L(p_radius, p_radius);
     }
 }

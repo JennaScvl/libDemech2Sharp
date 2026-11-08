@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace Demech2
 {
-    // The camera's shake (demech2 MW2/src/camerashake.c; fadepal.c PlayPlayerHitFeedback), in the Matrox edition's
+    // The camera's shake (demech2 MW2/src/camerashake.c; fadepal.c PlayPlayerHitFeedback), in the original's
     // floats: up to ten keys, each an offset of the cockpit eye's position (units) and pitch, heading and roll (degrees)
     // reached over its duration, played in turn on top of the eye's own view. A hit on the local mech, a collision or a
     // hard landing pushes the eye away from the blow and back. Not in the original: it runs on the real clock, which

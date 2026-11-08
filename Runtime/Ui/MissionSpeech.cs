@@ -9,7 +9,7 @@ namespace Demech2
     // the world. A mission's line is a sound name: the mission's sound file (keating\<name>.sfl) when there is one, else
     // the SNDS resource of that name. A cockpit line (g_cockpitSpeech) is a SNDS resource, maybe followed by a suffix
     // ("engaged"). Lines queue by priority (the sound's own, SoundLimits); a line already queued as often as the sound
-    // may play isn't queued again. Not ported but in Mercenaries (SayLine with text): the text shown without
+    // may play isn't queued again. Not ported but for the host's lines (SayLine with text): the text shown without
     // digital sound. Not the original's: two queues, each speaking beside the other: Betty's (the cockpit lines, and a
     // mission's lines named BET...) and the mission dialog's (the other mission lines, the lancemates); the game loads and
     // plays the lines (Host.Audio) and advances each queue a frame.
@@ -30,11 +30,9 @@ namespace Demech2
         {
             public int Id, SuffixId, Priority;
             public object Clip, Suffix;
-#if UNITY_EDITOR || MEKENGINE_MERCS
-            // Mercenaries' text (SpeechEntry +0x1c) and how long it's shown without speech (+0x14, g_currentClock).
+            // A line's text (SayLine with text) and how long it's shown without speech (g_currentClock).
             public string Text;
             public int HoldUntil;
-#endif
         }
 
         readonly List<Entry> queue = new List<Entry>();
@@ -58,7 +56,7 @@ namespace Demech2
             LaneOf(p_name).Queue(new Entry { Clip = clip, Priority = 0x50 });
         }
 
-        // Not the original's: Betty's queue for a line named BET..., else the mission dialog's.
+        // Betty's queue for a line named BET..., else the mission dialog's.
         static MissionSpeech LaneOf(string p_name) =>
             p_name != null && p_name.StartsWith("BET", StringComparison.OrdinalIgnoreCase) ? Betty : Dialog;
 
@@ -70,14 +68,12 @@ namespace Demech2
             Say(p_name);
         }
 
-#if UNITY_EDITOR || MEKENGINE_MERCS
-        // Mercenaries (mercsw.dll QueueSpeechPair 0x10007440, StartSpeech 0x100079a6): the line with its text (at most
-        // 0x33 characters, then "."). With the speech off the text shows on the message bar for 0x712 ticks
-        // (FUN_1005be24(text, 0, 0x712, 0x32)) in place of the sound, and a line without text isn't queued; with it on
-        // a line without a sound isn't. The other games: SayLine.
+        // The line with its text, when the host's lines carry text (Host.Objectives.LinesCarryText; at most 0x33
+        // characters, then "."). With the speech off the text shows on the message bar for 0x712 ticks in place of the
+        // sound, and a line without text isn't queued; with it on a line without a sound isn't. Otherwise SayLine.
         public static void SayLine(string p_name, string p_text)
         {
-            if (!Host.Variant.IsMercenaries)
+            if (!Host.Objectives.LinesCarryText)
             {
                 SayLine(p_name);
                 return;
@@ -96,7 +92,6 @@ namespace Demech2
             if (text.Length == 0) return;
             LaneOf(p_name).Queue(new Entry { Priority = 0x50, Text = text });
         }
-#endif
 
         // PlayVoiceVolumeTest: "Critical hit" at the voice volume, or with the speech off a beep at full volume.
         public static void PlayVoiceVolumeTest()
@@ -159,7 +154,7 @@ namespace Demech2
             QueueSpeechPrj(Host.Anim.MapSoundId(p_id), Host.Anim.MapSoundId(p_suffix), p_priority, p_betty);
         }
 
-        // QueueSpeech of the loaded PRJ's SNDS ids as they are (Titanium's SpeakSquadLine: mercsw.dll's own ids).
+        // QueueSpeech of the loaded PRJ's SNDS ids as they are (the host's own lines).
         public static void QueueSpeechPrj(int p_id, int p_suffix, int p_priority, bool p_betty = false)
         {
             if (p_id <= 0)
@@ -231,8 +226,7 @@ namespace Demech2
         void Speak(Entry p_entry)
         {
             speaking = p_entry;
-#if UNITY_EDITOR || MEKENGINE_MERCS
-            // Mercenaries' line with text and the speech off: the text, held 0x712 ticks.
+            // A line with text and the speech off: the text, held 0x712 ticks.
             if (p_entry.Text != null && !Audio.SpeechOn)
             {
                 suffixDue = false;
@@ -240,7 +234,6 @@ namespace Demech2
                 p_entry.HoldUntil = Clock.g_currentClock + 0x712;
                 return;
             }
-#endif
 
             suffixDue = p_entry.Suffix != null;
             Play(p_entry.Clip);
@@ -259,9 +252,7 @@ namespace Demech2
         public void AdvanceSpeechQueue()
         {
             if ((voice != null && voice.IsPlaying) || queue.Count == 0) return;
-#if UNITY_EDITOR || MEKENGINE_MERCS
             if (speaking != null && speaking.HoldUntil != 0 && Clock.g_currentClock < speaking.HoldUntil) return;
-#endif
             if (speaking != null && suffixDue)
             {
                 suffixDue = false;

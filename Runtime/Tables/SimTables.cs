@@ -13,7 +13,7 @@ namespace Demech2
     {
         public static string PathOf(string p_name) => Path.Combine(Application.streamingAssetsPath, "Tables", p_name + ".json");
 
-        // SHA-256 (hex) over every table, ordered by file name, each fed as its name then its exact bytes; MekNet refuses
+        // SHA-256 (hex) over every table, ordered by file name, each fed as its name then its exact bytes; a networked match refuses
         // joiners whose hash differs from the host's. "" when the folder is missing.
         public static string Hash => hash ??= ComputeHash();
         static string hash;

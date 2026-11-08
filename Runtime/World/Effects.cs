@@ -4,7 +4,7 @@ using UnityEngine;
 namespace Demech2
 {
     // Explosions, fires, flashes and debris (shots.c: SpawnEffectEx, UpdateEffects, ScatterDebris, StartNuke, UpdateNuke;
-    // world.c's xplode records; fadepal.c EmitWreckSmoke), the Matrox edition's floats as the lockstep's fixed point
+    // world.c's xplode records; fadepal.c EmitWreckSmoke), the floats as the lockstep's fixed point
     // (Fixed) where they are the sim's (the effects' places, timing, crowding and damage; their shapes, lights and sounds the
     // game's, Host.Fx). MW2 has no particles: each of the 0x100 effect slots is a shape (an xplode record's) shown where the
     // effect goes off for its type's duration, its animated faces playing once (SetAnimMode 2). Its type (g_effectInfo)
@@ -12,7 +12,8 @@ namespace Demech2
     // 0xb) slots are thrown as Debris pieces.
     //
     // An effect that damages hurts the mechs (with splash damage), the game things and the chunks near it while it lasts,
-    // and fires heat the mechs near them (HeatMechsNearFires).
+    // and fires heat the mechs near them (HeatMechsNearFires). The table, the crowding, a placed effect's additions, the
+    // damage and the nuke are the host's to change (Host.Effects).
     public static class Effects
     {
         public const int c_impactMech = 0x100, c_impactThing = 0x200, c_impactGround = 0x400;
@@ -28,11 +29,7 @@ namespace Demech2
             public readonly bool m_camera;     // the effect camera may follow it
             public readonly bool m_needsObject; // only a slot with a scene object can play it
             public readonly bool m_damages;    // it deals splash damage while it lasts
-            // Titanium's (SIZE 0x2c): the damage (the classic's 1/256) and heat per tick, and the flags (1 sticks to the
-            // mech it hit, 2 never crowded out); its sounds are the loaded PRJ's.
-            public readonly float m_damageRate, m_heatRate;
-            public readonly int m_damageRateFx, m_heatRateFx; // the sim's, 16.16 (truncated as the sim took them)
-            public readonly int m_flags;
+            public readonly object m_ext;      // the host's data for this type, or null
             readonly bool m_prjSound;
 
             public EffectInfo(int p_duration, int p_flash, int p_sound, int p_soundChance, int p_camera, int p_needsObject, int p_damages)
@@ -44,24 +41,16 @@ namespace Demech2
                 m_camera = p_camera != 0;
                 m_needsObject = p_needsObject != 0;
                 m_damages = p_damages != 0;
-                m_damageRate = 1f / 256;
-                m_heatRate = 0;
-                m_damageRateFx = 256;
-                m_heatRateFx = 0;
-                m_flags = 0;
+                m_ext = null;
                 m_prjSound = false;
             }
 
-            public EffectInfo(int p_duration, int p_flash, int p_sound, int p_soundChance, int p_camera, int p_needsObject,
-                int p_damages, float p_damageRate, float p_heatRate, int p_flags)
-                : this(p_duration, p_flash, p_sound, p_soundChance, p_camera, p_needsObject, p_damages)
+            // A copy of p_info with the host's data, its sound the loaded PRJ's id when p_soundIsPrjId.
+            public EffectInfo(EffectInfo p_info, bool p_soundIsPrjId, object p_ext)
             {
-                m_damageRate = p_damageRate;
-                m_heatRate = p_heatRate;
-                m_damageRateFx = (int)(p_damageRate * 65536f);
-                m_heatRateFx = (int)(p_heatRate * 65536f);
-                m_flags = p_flags;
-                m_prjSound = true;
+                this = p_info;
+                m_ext = p_ext;
+                m_prjSound = p_soundIsPrjId;
             }
 
             // The sound as the loaded PRJ's id.
@@ -89,137 +78,12 @@ namespace Demech2
 
         public static EffectInfo[] BaseInfo => BlastKinds.All;
 
-        // Titanium's g_effectInfo (mercsw.dll 0x1009bb08, 0x24 entries): 0xa the inferno's fire, 0x22 the torpedo's
-        // blast, 0x23 the Arrow IV's.
-        public static readonly EffectInfo[] TitaniumEffectInfo =
-        {
-            new EffectInfo(271, -1, 272, -1, 0, 1, 0, 1f / 256, 0, 0), // 0x00
-            new EffectInfo(271, -1, 272, -1, 0, 1, 0, 1f / 256, 0, 0), // 0x01
-            new EffectInfo(271, -1, 272, -1, 0, 1, 0, 1f / 256, 0, 0), // 0x02
-            new EffectInfo(253, 1, 227, -1, 1, 1, 1, 1f / 256, 0, 0), // 0x03
-            new EffectInfo(253, 1, 227, -1, 1, 1, 1, 1f / 256, 0, 0), // 0x04
-            new EffectInfo(90, -1, 271, -1, 0, 1, 0, 1f / 256, 0, 0), // 0x05
-            new EffectInfo(579, 2, 256, -1, 1, 1, 1, 1f / 256, 0, 0), // 0x06
-            new EffectInfo(398, 1, 205, -1, 0, 1, 1, 1f / 256, 0, 0), // 0x07
-            new EffectInfo(90, -1, 269, -1, 0, 1, 0, 1f / 256, 0, 0), // 0x08
-            new EffectInfo(162, -1, 260, 10, 0, 1, 0, 1f / 256, 0, 0), // 0x09
-            new EffectInfo(905, -1, 95, -1, 1, 1, 1, 0, 1f / 64, 3), // 0x0a
-            new EffectInfo(1810, -1, -1, -1, 0, 1, 0, 1f / 256, 0, 0), // 0x0b
-            new EffectInfo(398, 1, 227, -1, 1, 1, 1, 1f / 256, 0, 0), // 0x0c
-            new EffectInfo(579, 1, 267, -1, 1, 1, 1, 1f / 256, 0, 0), // 0x0d
-            new EffectInfo(72, -1, 270, -1, 0, 1, 0, 1f / 256, 0, 0), // 0x0e
-            new EffectInfo(72, -1, 270, -1, 0, 1, 0, 1f / 256, 0, 0), // 0x0f
-            new EffectInfo(72, -1, 270, -1, 0, 1, 0, 1f / 256, 0, 0), // 0x10
-            new EffectInfo(108, 1, 277, -1, 1, 1, 1, 1f / 256, 0, 0), // 0x11
-            new EffectInfo(144, -1, 273, -1, 0, 1, 0, 1f / 256, 0, 0), // 0x12
-            new EffectInfo(362, 1, 227, -1, 1, 1, 1, 1f / 256, 0, 0), // 0x13
-            new EffectInfo(362, 1, 227, -1, 1, 1, 1, 1f / 256, 0, 0), // 0x14
-            new EffectInfo(579, 2, 256, -1, 1, 1, 1, 1f / 256, 0, 0), // 0x15
-            new EffectInfo(1810, -1, 226, -1, 1, 1, 1, 1f / 8, 1f / 64, 2), // 0x16
-            new EffectInfo(36, -1, -1, -1, 0, 1, 0, 1f / 256, 0, 0), // 0x17
-            new EffectInfo(36, -1, -1, -1, 0, 1, 0, 1f / 256, 0, 0), // 0x18
-            new EffectInfo(72, -1, -1, -1, 0, 1, 0, 1f / 256, 0, 0), // 0x19
-            new EffectInfo(36, -1, -1, -1, 0, 1, 0, 1f / 256, 0, 0), // 0x1a
-            new EffectInfo(36, -1, -1, -1, 0, 1, 0, 1f / 256, 0, 0), // 0x1b
-            new EffectInfo(36, -1, -1, -1, 0, 1, 0, 1f / 256, 0, 0), // 0x1c
-            new EffectInfo(36, -1, -1, -1, 0, 1, 0, 1f / 256, 0, 0), // 0x1d
-            new EffectInfo(36, -1, -1, -1, 0, 1, 0, 1f / 256, 0, 0), // 0x1e
-            new EffectInfo(36, -1, -1, -1, 0, 1, 0, 1f / 256, 0, 0), // 0x1f
-            new EffectInfo(36, -1, -1, -1, 0, 1, 0, 1f / 256, 0, 0), // 0x20
-            new EffectInfo(36, -1, -1, -1, 0, 1, 0, 1f / 256, 0, 0), // 0x21
-            new EffectInfo(181, 1, 362, -1, 1, 1, 1, 1f / 64, 0, 0), // 0x22
-            new EffectInfo(181, 1, 285, -1, 1, 1, 1, 1f / 8, 0, 2), // 0x23
-        };
+        // The effect types in use (the host's table; the base game's by default).
+        public static EffectInfo[] Info => Host.Effects.Info;
 
-        // Ghost Bear's Legacy's g_effectInfo (GBL MW2.flat 0xb0d04, 0x24 entries of 0x2c: duration, flash, sound, chance,
-        // camera, needs object, damages, an unread dword (2; 1 for the inferno), the damage and heat rates (16.16) and the
-        // flags): Titanium's layout, its own values; its sounds its PRJ's ids (467 the inferno, 457 the torpedo, 465 Arrow
-        // IV). Its SpawnEffect (0x52040) and UpdateEffects (0x52670) are Titanium's but for the details Gbl marks.
-        public static readonly EffectInfo[] GblEffectInfo =
-        {
-            new EffectInfo(273, -1, 251, -1, 0, 1, 0, 256f / 65536, 0, 0), // 0x00
-            new EffectInfo(273, -1, 251, -1, 0, 1, 0, 256f / 65536, 0, 0), // 0x01
-            new EffectInfo(273, -1, 251, -1, 0, 1, 0, 256f / 65536, 0, 0), // 0x02
-            new EffectInfo(254, 1, 210, -1, 1, 1, 1, 256f / 65536, 0, 0), // 0x03
-            new EffectInfo(254, 1, 210, -1, 1, 1, 1, 256f / 65536, 0, 0), // 0x04
-            new EffectInfo(91, -1, 250, -1, 0, 1, 0, 256f / 65536, 0, 0), // 0x05
-            new EffectInfo(582, 2, 235, -1, 1, 1, 1, 256f / 65536, 0, 0), // 0x06
-            new EffectInfo(400, 1, 188, -1, 0, 1, 1, 256f / 65536, 0, 0), // 0x07
-            new EffectInfo(91, -1, 248, -1, 0, 1, 0, 256f / 65536, 0, 0), // 0x08
-            new EffectInfo(163, -1, 239, 10, 0, 1, 0, 256f / 65536, 0, 0), // 0x09
-            new EffectInfo(910, -1, 467, -1, 1, 1, 1, 128f / 65536, 1024f / 65536, 3), // 0x0a
-            new EffectInfo(1820, -1, -1, -1, 0, 1, 0, 256f / 65536, 0, 0), // 0x0b
-            new EffectInfo(400, 1, 210, -1, 1, 1, 1, 256f / 65536, 0, 0), // 0x0c
-            new EffectInfo(582, 1, 246, -1, 1, 1, 1, 256f / 65536, 0, 0), // 0x0d
-            new EffectInfo(72, -1, 249, -1, 0, 1, 0, 256f / 65536, 0, 0), // 0x0e
-            new EffectInfo(72, -1, 249, -1, 0, 1, 0, 256f / 65536, 0, 0), // 0x0f
-            new EffectInfo(72, -1, 249, -1, 0, 1, 0, 256f / 65536, 0, 0), // 0x10
-            new EffectInfo(109, 1, 255, -1, 1, 1, 1, 256f / 65536, 0, 0), // 0x11
-            new EffectInfo(145, -1, 252, -1, 0, 1, 0, 256f / 65536, 0, 0), // 0x12
-            new EffectInfo(364, 1, 210, -1, 1, 1, 1, 256f / 65536, 0, 0), // 0x13
-            new EffectInfo(364, 1, 210, -1, 1, 1, 1, 256f / 65536, 0, 0), // 0x14
-            new EffectInfo(582, 2, 235, -1, 1, 1, 1, 256f / 65536, 0, 0), // 0x15
-            new EffectInfo(1820, -1, 209, -1, 1, 1, 1, 8192f / 65536, 1024f / 65536, 2), // 0x16
-            new EffectInfo(36, -1, -1, -1, 0, 1, 0, 256f / 65536, 0, 0), // 0x17
-            new EffectInfo(36, -1, -1, -1, 0, 1, 0, 256f / 65536, 0, 0), // 0x18
-            new EffectInfo(72, -1, -1, -1, 0, 1, 0, 256f / 65536, 0, 0), // 0x19
-            new EffectInfo(36, -1, -1, -1, 0, 1, 0, 256f / 65536, 0, 0), // 0x1a
-            new EffectInfo(36, -1, -1, -1, 0, 1, 0, 256f / 65536, 0, 0), // 0x1b
-            new EffectInfo(36, -1, -1, -1, 0, 1, 0, 256f / 65536, 0, 0), // 0x1c
-            new EffectInfo(36, -1, -1, -1, 0, 1, 0, 256f / 65536, 0, 0), // 0x1d
-            new EffectInfo(36, -1, -1, -1, 0, 1, 0, 256f / 65536, 0, 0), // 0x1e
-            new EffectInfo(36, -1, -1, -1, 0, 1, 0, 256f / 65536, 0, 0), // 0x1f
-            new EffectInfo(36, -1, -1, -1, 0, 1, 0, 256f / 65536, 0, 0), // 0x20
-            new EffectInfo(36, -1, -1, -1, 0, 1, 0, 256f / 65536, 0, 0), // 0x21
-            new EffectInfo(254, 1, 457, -1, 1, 1, 1, 1024f / 65536, 0, 0), // 0x22
-            new EffectInfo(254, 1, 465, -1, 1, 1, 1, 8192f / 65536, 0, 2), // 0x23
-        };
 
-#if UNITY_EDITOR || MEKENGINE_MERCS
-        // Mercenaries' g_effectInfo (DOS-Win95 MERCSW.DLL 0x100a9670, 0x24 entries of 0x2c; both editions): Titanium's but
-        // the inferno's fire (0xa), which damages 128 a tick (1/512).
-        public static readonly EffectInfo[] MercsEffectInfo = BuildMercsEffectInfo();
-
-        static EffectInfo[] BuildMercsEffectInfo()
-        {
-            var info = (EffectInfo[])TitaniumEffectInfo.Clone();
-            info[0x0a] = new EffectInfo(905, -1, 95, -1, 1, 1, 1, 1f / 512, 1f / 64, 3);
-            return info;
-        }
-#endif
-
-        static bool Titanium => WeaponDef.Titanium;
-        // GBL's effect rules; a MekNet match runs Titanium's (WeaponDef.Titanium).
-        static bool Gbl => Host.Variant.IsGhostBearsLegacy && !Host.Net.NetRules;
-#if UNITY_EDITOR || MEKENGINE_MERCS
-        // Mercenaries (SpawnEffect 0x1004ab46, UpdateEffects 0x1004b4ef): Titanium's effects with GBL's approximate distance
-        // and splash damage (a quarter in the head; its heat goes to mech +0x3c8, which nothing reads), only Arrow IV's
-        // blast growing (24 a tick).
-        static bool Mercs => WeaponDef.Mercs;
-#endif
-        // The 0x24-type effects (Titanium's, Mercenaries', and GBL's).
-        public static bool TiFx => Titanium || Gbl;
-#if UNITY_EDITOR || MEKENGINE_MERCS
-        public static EffectInfo[] Info => Mercs ? MercsEffectInfo : Titanium ? TitaniumEffectInfo : Gbl ? GblEffectInfo : BaseInfo;
-#else
-        public static EffectInfo[] Info => Titanium ? TitaniumEffectInfo : Gbl ? GblEffectInfo : BaseInfo;
-#endif
-
-        // The running edition's own entry for an effect type, for what it plays: its sound (its PRJ's ids) and palette
-        // flash. In a MekNet match the rules' table is Titanium's whatever the edition, so the edition's own table at the
-        // type it shows (the game's EffectVisualType); outside one, Info's.
-        static EffectInfo LocalInfo(int p_type)
-        {
-            if (!Host.Net.NetRules) return Info[p_type];
-#if UNITY_EDITOR || MEKENGINE_MERCS
-            EffectInfo[] own = WeaponDef.NativeMercs ? MercsEffectInfo : WeaponDef.NativeTitanium ? TitaniumEffectInfo
-                : Host.Variant.IsGhostBearsLegacy ? GblEffectInfo : BaseInfo;
-#else
-            EffectInfo[] own = WeaponDef.NativeTitanium ? TitaniumEffectInfo : Host.Variant.IsGhostBearsLegacy ? GblEffectInfo : BaseInfo;
-#endif
-            int type = Host.Fx.EffectVisualType(p_type);
-            return own[type >= 0 && type < own.Length ? type : 3];
-        }
+        // The entry for an effect type whose sound and palette flash the running game plays (Info's by default).
+        static EffectInfo LocalInfo(int p_type) => Host.Effects.LocalInfo(p_type);
 
         // Effect (SIZE 0x28)
         public sealed class Effect
@@ -232,8 +96,8 @@ namespace Demech2
             public bool m_hasCamera;
             public int m_type = -1;     // an index into g_effectInfo
             public int m_owner = -1;    // the player it damages on behalf of, or -2
-            public Shape m_follow;      // Titanium: the mech part a sticky effect (flags 1) rides on
-            public int m_billboard;     // not the original's: 0 none, 1 turned to the eye about the vertical, 2 turned to it fully
+            public object m_ext;        // the host's data for this slot, or null (Host.Effects.ResetSlot clears it)
+            public int m_billboard;     // the game's: 0 none, 1 turned to the eye about the vertical, 2 turned to it fully
         }
 
         public static readonly Effect[] g_effects = new Effect[c_slotCount];
@@ -269,13 +133,13 @@ namespace Demech2
             effect.m_active = false;
             effect.m_hasCamera = false;
             effect.m_owner = -1;
-            effect.m_follow = null;
+            Host.Effects.ResetSlot(effect);
         }
 
-        // Not the original's: a MekNet match runs Titanium's effects on every edition's world (WeaponDef.Titanium). An
-        // effect with no free slot of its type takes a slot no xplode record filled, made its type for good, shown as the
-        // world's own shape of it or of its nearest (the game's ClaimEffectLook; none: unseen, still burning and
-        // damaging). The damage reaches Titanium's shape radius (TitaniumEffectRadius), so every machine damages alike.
+        // A networked match's effect with no free slot of its type takes a slot no xplode record filled, made its type
+        // for good, shown as the world's own shape of it or of its nearest (the game's ClaimEffectLook; none: unseen,
+        // still burning and damaging). The damage reaches the host's fixed radius (Host.Effects.FixedRadius), so every
+        // machine damages alike.
         static int Claim(int p_type)
         {
             for (int i = g_nextEffectRecord; i < c_slotCount; i++)
@@ -291,21 +155,10 @@ namespace Demech2
             return -1;
         }
 
-        // Titanium's radii by effect type (units), from its worlds' xplode shapes; a type not listed takes its object's.
-        static readonly Dictionary<int, float> TitaniumEffectRadius = new Dictionary<int, float>
+        // An effect's damage radius (16.16 units): the host's fixed one, else its object's; false without either.
+        public static bool DamageRadius(Effect p_effect, out long p_radius)
         {
-            { 0x0, 282.1365f }, { 0x1, 282.1365f }, { 0x2, 282.1365f }, { 0x3, 564.273f }, { 0x4, 564.273f },
-            { 0x5, 141.068253f }, { 0x6, 1410.6825f }, { 0x7, 140.714249f }, { 0x8, 141.068253f }, { 0x9, 141.068253f },
-            { 0xa, 707.1068f }, { 0xb, 47.92703f }, { 0xc, 1410.6825f }, { 0xd, 1906.1377f }, { 0xe, 282.1365f },
-            { 0xf, 282.1365f }, { 0x10, 282.1365f }, { 0x11, 2116.02368f }, { 0x12, 141.068253f }, { 0x13, 1410.6825f },
-            { 0x14, 1410.6825f }, { 0x15, 1414.21362f }, { 0x16, 7071.068f }, { 0x17, 140.714249f }, { 0x19, 258.0097f },
-            { 0x22, 564.273f }, { 0x23, 1410.6825f },
-        };
-
-        // An effect's damage radius (16.16 units): Titanium's in a MekNet match, else its object's; false without either.
-        static bool DamageRadius(Effect p_effect, out long p_radius)
-        {
-            if (Host.Net.NetRules && TitaniumEffectRadius.TryGetValue(p_effect.m_type, out float radius))
+            if (Host.Effects.FixedRadius(p_effect.m_type, out float radius))
             {
                 p_radius = Fixed.FromFloatL(radius);
                 return true;
@@ -337,15 +190,11 @@ namespace Demech2
         // Spawns an effect. The low byte of p_type is the effect; the high byte says what a shot hit (c_impactMech etc.),
         // which picks a variant of it, and 0x4000 keeps its sound quiet. The effect takes a free slot of its type (none if
         // three of them already burn within 500 units), and the effect camera may follow it from p_camera. p_angles:
-        // degrees. Titanium (SpawnEffect 0x10011f58): 0x24 types, the torpedo's and Arrow IV's (0x22, 0x23) varying as the
-        // missiles' 3 does; launch effects and flags-2 types never crowded out; a sticky type (flags 1) rides on the mech
-        // part it hit (p_hit), else lasts 0xb5 ticks.
-        // Not the original's: the game's look of the shot DetonateShot is setting off (Host.Fx.ImpactFxFor; null
-        // otherwise).
+        // degrees. Types 0x22 and 0x23 (when the host's table has them) vary as the missiles' 3 does.
+        // The game's look of the shot DetonateShot is setting off (Host.Fx.ImpactFxFor; null otherwise).
         public static object g_impactFx;
 
-        // Not the original's: an explosion (a missile's impact, something destroyed) is heard over MW2's falloff rather
-        // than the natural one. Its chained effects too.
+        // An explosion (a missile's impact, something destroyed), for the game's sound. Its chained effects too.
         public static bool g_explosionSound;
 
         public static void SpawnExplosion(int p_owner, int p_type, FixVec p_at, FixVec p_camera, Shape p_hit = null)
@@ -371,7 +220,7 @@ namespace Demech2
 
             int flags = p_type & 0xff00;
             p_type &= 0xff;
-            if (p_type >= (TiFx ? 0x24 : 0x20)) return;
+            if (p_type >= Host.Effects.TypeCount) return;
             if ((flags & 0x4000) != 0) quiet = true;
 
             switch (p_type)
@@ -440,16 +289,7 @@ namespace Demech2
                     if (other.m_type != p_type) continue;
                     if (other.m_active)
                     {
-                        // GBL (0x52040): Titanium's test with the approximate distance.
-#if UNITY_EDITOR || MEKENGINE_MERCS
-                        bool crowds = Gbl || Mercs
-#else
-                        bool crowds = Gbl
-#endif
-                            ? (other.m_type < 0x17 || other.m_type > 0x21) && (info.m_flags & 2) == 0 && (other.m_position - p_at).ApproxLength < 500L << 16
-                            : Titanium
-                            ? (other.m_type < 0x17 || other.m_type > 0x21) && (info.m_flags & 2) == 0 && (other.m_position - p_at).Length < 500L << 16
-                            : other.m_type < 0x17 && (other.m_position - p_at).ApproxLength < 500L << 16;
+                        bool crowds = Host.Effects.Crowds(other, info, p_at);
                         if (crowds)
                         {
                             count++;
@@ -472,20 +312,9 @@ namespace Demech2
                 effect.m_position = p_at;
                 effect.m_timeLeft = info.m_duration + Clock.g_deltaTime;
                 effect.m_owner = p_owner;
-                effect.m_follow = null;
+                Host.Effects.Spawned(effect, info, p_hit, ref p_at);
                 if (effect.m_object != null)
                 {
-                    if ((info.m_flags & 1) != 0)
-                    {
-                        if (p_hit != null && (p_hit.Kind & 0x400) == 0 && (p_hit.Kind & 0x100) != 0)
-                        {
-                            effect.m_follow = p_hit;
-                            p_at = p_hit.FxCenter;
-                            effect.m_position = p_at;
-                        }
-                        else effect.m_timeLeft = Clock.g_deltaTime + (Gbl ? 0xb6 : 0xb5);
-                    }
-
                     if (p_type >= 0x17 && g_launchEffectFiringObj != null)
                     {
                         Host.Fx.PlaceAtFiringObj(g_launchEffectFiringObj, effect.m_object);
@@ -506,7 +335,7 @@ namespace Demech2
                     }
                 }
 
-                // Not the original's: the effect's light (its type's, or a shot's own impact look, g_impactFx).
+                // The game's light of the effect (its type's, or a shot's own impact look, g_impactFx).
                 Host.Fx.LightEffect(impactFx, p_type, effect.m_object, p_at, p_camera, info.m_camera, info.m_duration, s_lightKelvin, p_hit);
 
                 if (info.m_camera && Host.Fx.EffectCameraEnabled)
@@ -573,51 +402,7 @@ namespace Demech2
                 if (!effect.m_active) continue;
 
                 EffectInfo info = Info[effect.m_type];
-                if (TiFx)
-                {
-                    // A sticky effect follows its mech part.
-                    if ((info.m_flags & 1) != 0 && effect.m_follow != null)
-                    {
-                        effect.m_position = effect.m_follow.FxCenter;
-                        effect.m_object?.SetPosition(effect.m_position.ToFloat());
-                    }
-
-                    // UpdateEffects (0x100128d0): the nuke's and the Arrow IV's blasts grow (28 and 24 units a tick) and
-                    // damage mechs without splash damage too; the rates are the type's. The heat rate goes to mech+0xdc8,
-                    // which nothing reads (as written): not ported.
-                    // Mercenaries (0x1004b4ef): only Arrow IV's grows (the nuke's effect its object's radius), and both splash.
-#if UNITY_EDITOR || MEKENGINE_MERCS
-                    bool grows = Mercs ? effect.m_type == 0x23 : effect.m_type == 0x16 || effect.m_type == 0x23;
-                    bool splashes = grows || (Mercs && effect.m_type == 0x16);
-#else
-                    bool grows = effect.m_type == 0x16 || effect.m_type == 0x23;
-                    bool splashes = grows;
-#endif
-                    bool sized = DamageRadius(effect, out long shapeRadius);
-                    if (info.m_damages && (grows || sized))
-                    {
-#if UNITY_EDITOR || MEKENGINE_MERCS
-                        long radius = effect.m_type == 0x16 && !Mercs ? (long)(info.m_duration - effect.m_timeLeft) * 28 << 16
-#else
-                        long radius = effect.m_type == 0x16 ? (long)(info.m_duration - effect.m_timeLeft) * 28 << 16
-#endif
-                            : effect.m_type == 0x23 ? (long)(info.m_duration - effect.m_timeLeft) * 24 << 16
-                            : shapeRadius;
-                        if (SimMain.g_difficulty.m_splashDamage || splashes)
-                        {
-                            // GBL (0x52900): the approximate distance, a quarter in the head, and the heat rate heats the mech.
-                            if (Gbl) Mech.DamageMechsInRadiusGbl(effect.m_owner, effect.m_position, radius, info.m_damageRateFx, info.m_heatRateFx);
-#if UNITY_EDITOR || MEKENGINE_MERCS
-                            // Mercenaries (0x1004b839): GBL's, its heat into an unread field.
-                            else if (Mercs) Mech.DamageMechsInRadiusGbl(effect.m_owner, effect.m_position, radius, info.m_damageRateFx, 0);
-#endif
-                            else Mech.DamageMechsInRadiusTitanium(effect.m_owner, effect.m_position, radius, info.m_damageRateFx);
-                        }
-
-                        if (SimMain.g_world != null) Shots.DamageThingsInRadius(SimMain.g_world, effect.m_owner, effect.m_position, radius, info.m_damageRateFx);
-                        Debris.DamageChunksInRadius(effect.m_position, radius, info.m_damageRateFx);
-                    }
-                }
+                if (Host.Effects.UpdateDamage(effect, info)) { }
                 else if (info.m_damages && DamageRadius(effect, out long radius))
                 {
                     if (SimMain.g_difficulty.m_splashDamage) Mech.DamageMechsInRadius(effect.m_owner, effect.m_position, radius, 256);
@@ -651,11 +436,11 @@ namespace Demech2
 
         // ---- Wrecks and nukes ---------------------------------------------------------------------------------------------
 
-        // Not the original's: a fireball's peak temperature for the effect SpawnEffectEx is lighting (0: its type's light's).
+        // The game's fireball peak temperature for the effect SpawnEffectEx is lighting (0: its type's light's).
         static float s_lightKelvin;
 
         // A wrecked mech's smoke (fadepal.c EmitWreckSmoke): once as it falls (p_stateTime 0), then now and then a spark or
-        // a puff near it. Not the original's: its reactor's fireball peaks at p_kelvin.
+        // a puff near it. Its reactor's fireball peaks at p_kelvin (the game's light).
         // Its draws are the gameplay stream's: the sparks (type 3) damage what is near them.
         public static void EmitWreckSmoke(int p_killer, Vector3Int p_units, int p_stateTime, float p_kelvin = 0)
         {
@@ -681,8 +466,8 @@ namespace Demech2
         {
             int duration = Info[0x16].m_duration * 2;
             g_nukeMaxRadius = 400000L << 16;
-            // A MekNet match: Titanium's nuke shape's (DamageRadius).
-            if (Host.Net.NetRules && TitaniumEffectRadius.TryGetValue(0x16, out float nukeRadius))
+            // The host's fixed nuke radius (DamageRadius's).
+            if (Host.Effects.FixedRadius(0x16, out float nukeRadius))
                 g_nukeMaxRadius = Fixed.FromFloatL(nukeRadius * 100);
             else for (int i = c_slotCount - 1; i >= 0; i--)
             {
@@ -707,31 +492,7 @@ namespace Demech2
             if (g_nukeTimeLeft <= 0) return;
             g_nukeRadius += (long)Clock.g_deltaTime * 200 << 16;
             if (g_nukeRadius > g_nukeMaxRadius) g_nukeRadius = g_nukeMaxRadius;
-#if UNITY_EDITOR || MEKENGINE_MERCS
-            if (Mercs)
-            {
-                // Mercenaries' UpdateNuke (0x1004c273): the classic's 1/16 (0x1000) through its splash, owner -2, no heat.
-                Mech.DamageMechsInRadiusGbl(-2, g_nukePosition, g_nukeRadius, 0x1000, 0);
-                if (SimMain.g_world != null) Shots.DamageThingsInRadius(SimMain.g_world, -2, g_nukePosition, g_nukeRadius, 0x1000);
-                Debris.DamageChunksInRadius(g_nukePosition, g_nukeRadius, 0x1000);
-            }
-            else if (Titanium)
-#else
-            if (Titanium)
-#endif
-            {
-                // Titanium's UpdateNuke (0x1001358f): 4096 a tick (0x45800000, in points where the classic's 1/16 was).
-                Mech.DamageMechsInRadiusTitanium(-2, g_nukePosition, g_nukeRadius, 4096 << 16);
-                if (SimMain.g_world != null) Shots.DamageThingsInRadius(SimMain.g_world, -2, g_nukePosition, g_nukeRadius, 4096 << 16);
-                Debris.DamageChunksInRadius(g_nukePosition, g_nukeRadius, 4096L << 16);
-            }
-            else if (Gbl)
-            {
-                // GBL's UpdateNuke (MW2.flat 0x530d0): the classic's 1/16 through GBL's splash (0x52900), no heat.
-                Mech.DamageMechsInRadiusGbl(-1, g_nukePosition, g_nukeRadius, 0x1000, 0);
-                if (SimMain.g_world != null) Shots.DamageThingsInRadius(SimMain.g_world, -1, g_nukePosition, g_nukeRadius, 0x1000);
-                Debris.DamageChunksInRadius(g_nukePosition, g_nukeRadius, 0x1000);
-            }
+            if (Host.Effects.UpdateNuke(g_nukePosition, g_nukeRadius)) { }
             else
             {
                 Mech.DamageMechsInRadius(-1, g_nukePosition, g_nukeRadius, 0x1000);

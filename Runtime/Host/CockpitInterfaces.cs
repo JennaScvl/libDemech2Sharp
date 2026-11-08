@@ -54,7 +54,7 @@ namespace Demech2
         int TorsoPitch { get; }
         int HeadingFixed { get; }    // Player::m_heading
         PlayerTargetInfo Target { get; }   // Player::m_targetInfo
-        PlayerTargetInfo Route { get; }    // Titanium's route nav (Player +0xe8)
+        PlayerTargetInfo Route { get; }    // the autopilot's route nav (Host.Mechs.Route)
         int AimRange { get; }        // Player::m_aimRange's value, units
         int Throttle { get; }        // m_throttle's value: 0x400 stopped, 0x800 full
     }

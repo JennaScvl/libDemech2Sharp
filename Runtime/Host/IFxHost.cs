@@ -17,17 +17,17 @@ namespace Demech2
         // FirstShots: the shapes' templates, the tracers and the pending booyowthing shapes gone.
         void ResetShotLooks();
 
-        // Not the original's: a new slot of shot type p_type with its shape (in a MekNet match p_visualType's when
-        // the world has none of p_type); -1 without one.
+        // A new slot of shot type p_type with its shape (p_visualType's when the world has none of p_type); -1 without
+        // one.
         int GrowShot(int p_type, int p_visualType);
 
-        // The radius a launch moves p_shot on by (twice it): its object's, in a MekNet match Titanium's.
+        // The radius a launch moves p_shot on by (twice it): its object's, or the game's.
         float ShotLaunchRadius(Shot p_shot);
 
         // The impact look of weapon p_weapon's shot (passed back to LightEffect), or null.
         object ImpactFxFor(int p_weapon);
 
-        // Mercenaries: a bullet's tracer from p_at (units) at p_velocity; the tracers' step.
+        // A bullet's tracer from p_at (units) at p_velocity; the tracers' step.
         void SpawnTracer(Vector3 p_at, Vector3 p_velocity);
         void UpdateTracers();
 
@@ -36,8 +36,8 @@ namespace Demech2
         // FirstEffects: the templates and pending xplode shapes gone, the effect camera free.
         void ResetEffectLooks();
 
-        // Not the original's: the effect type the world shows for p_type; a slot a MekNet match claimed given its
-        // look (and its animation).
+        // The effect type the world shows for p_type; a slot a networked match claimed given its look (and its
+        // animation).
         int EffectVisualType(int p_type);
         void ClaimEffectLook(int p_slot, int p_type);
 

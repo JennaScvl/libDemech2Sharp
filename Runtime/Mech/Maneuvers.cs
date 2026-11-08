@@ -86,45 +86,6 @@ namespace Demech2
             new ManeuverTable { Source = () => FeatherweightManeuvers, m_followOnly = 7 },
         };
 
-        // GBL's tables (MW2.flat 0xa6e38): types 2 to 8 all stupid (the classic's 5 circles, 8 goes behind); and its
-        // personalities' (0xa62dc: maneuvers, back-off distance, group fire).
-        public static readonly ManeuverTable GblStupidTable = new ManeuverTable { Source = () => PlainManeuvers };
-
-        public static readonly int[][] GblCautiousManeuvers =
-        {
-            new[] { 0, 7, 0, 0, 0, 0, 0, 8, 8 }, new[] { 1, 6, 0, 0, 0, 0, 0, 1, 0 }, new[] { 2, 7, 0, 0, 0, 0, 0, 7, 1 },
-            new[] { 3, 1, 0, 0, 0, 0, 0, 0, 0 }, new[] { 4, 4, 0, 0, 8, 5, 0, 0, 0 }, new[] { 5, 4, 0, 0, 7, 8, 0, 0, 0 },
-            new[] { 6, 1, 6, 0, 0, 0, 0, 0, 0 }, new[] { 7, 3, 0, 0, 8, 0, 0, 0, 0 }, new[] { 8, 5, 0, 0, 0, 8, 0, 0, 0 },
-            new[] { 9, 4, 0, 0, 8, 7, 0, 0, 0 }, new[] { 10, 3, 0, 0, 7, 0, 0, 0, 0 }, new[] { 11, 1, 0, 0, 0, 0, 0, 0, 0 },
-            new[] { 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-        };
-
-        public static readonly int[][] GblCautiousManeuvers2 =
-        {
-            new[] { 0, 7, 0, 0, 0, 0, 0, 2, 8 }, new[] { 1, 6, 0, 0, 0, 0, 0, 1, 0 }, new[] { 2, 7, 0, 0, 0, 0, 0, 7, 1 },
-            new[] { 3, 1, 0, 0, 0, 0, 0, 0, 0 }, new[] { 4, 4, 0, 0, 8, 5, 0, 0, 0 }, new[] { 5, 4, 0, 0, 7, 8, 0, 0, 0 },
-            new[] { 6, 1, 6, 0, 0, 0, 0, 0, 0 }, new[] { 7, 3, 0, 0, 8, 0, 0, 0, 0 }, new[] { 8, 5, 0, 0, 0, 8, 0, 0, 0 },
-            new[] { 9, 4, 0, 0, 8, 7, 0, 0, 0 }, new[] { 10, 3, 0, 0, 7, 0, 0, 0, 0 }, new[] { 11, 1, 0, 0, 0, 0, 0, 0, 0 },
-            new[] { 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-        };
-
-        public static readonly int[][] GblGroupManeuvers =
-        {
-            new[] { 0, 6, 0, 1, 2, 3, 4, 4, 0 }, new[] { 1, 5, 0, 1, 2, 3, 4, 0, 0 }, new[] { 2, 2, 7, 4, 0, 0, 0, 0, 0 },
-            new[] { 3, 1, 7, 0, 0, 0, 0, 0, 0 }, new[] { 4, 3, 5, 5, 8, 0, 0, 0, 0 }, new[] { 5, 2, 7, 8, 0, 0, 0, 0, 0 },
-            new[] { 6, 1, 6, 0, 0, 0, 0, 0, 0 }, new[] { 7, 2, 0, 1, 0, 0, 0, 0, 0 }, new[] { 8, 5, 0, 1, 2, 3, 4, 0, 0 },
-            new[] { 9, 3, 0, 8, 7, 0, 0, 0, 0 }, new[] { 10, 3, 7, 7, 4, 0, 0, 0, 0 }, new[] { 11, 2, 3, 1, 0, 0, 0, 0, 0 },
-            new[] { 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-        };
-
-        public static readonly (ManeuverTable table, int range, bool groupFire)[] GblPersonalities =
-        {
-            (new ManeuverTable { Source = () => FeatherweightManeuvers, m_followOnly = 7 }, 0, false),
-            (new ManeuverTable { m_entries = GblCautiousManeuvers, m_followOnly = 7 }, 25000, false),
-            (new ManeuverTable { m_entries = GblGroupManeuvers, m_followOnly = 7 }, 5000, true),
-            (new ManeuverTable { m_entries = GblCautiousManeuvers2, m_followOnly = 7 }, 20000, false),
-        };
-
         public int m_maneuver = -1, m_lastManeuver = -1;   // m_lastManeuver (S16)
         public int m_nextManeuver;                        // one asked for (0 none), or -2 to flee
         public int m_maneuverEnd, m_maneuverTimer;          // m_maneuverTimer
@@ -268,19 +229,7 @@ namespace Demech2
             m_skillFlags[4] = m_piloting <= 4;
             m_skillFlags[5] = m_type == 1 && m_piloting <= 1;
             m_skillFlags[6] = m_piloting <= 5;
-            if (Host.Variant.IsGhostBearsLegacy)
-            {
-                // GBL (0x2c970): without a personality's, the type's table (the 1-ton mech's alternative); 15000 to back
-                // off within.
-                if (m_gblManeuvers == null)
-                    m_gblManeuvers = m_type == 1 ? m_config != null && m_config.m_tons == 1 ? g_maneuverTables[8] : g_maneuverTables[0] : GblStupidTable;
-                if (m_gblAvoidRange == 0) m_gblAvoidRange = 15000;
-            }
-
-            // Mercenaries (0x10036601's tail): no personality's back-off distance gives 15000.
-#if UNITY_EDITOR || MEKENGINE_MERCS
-            if (WeaponDef.Mercs && m_mercsAvoidRange == 0) m_mercsAvoidRange = 15000;
-#endif
+            Host.Ai.ManeuversInitialized(this);
         }
 
         // ChooseManeuver: one an order asked for (-2: flee), a mech's escape when stuck, a walk at a target that isn't a
@@ -291,7 +240,7 @@ namespace Demech2
             int choice;
             ManeuverTable table = m_type >= 1 && m_type <= 8 ? g_maneuverTables[m_type - 1] : g_maneuverTables[1];
             if (m_config != null && m_config.m_tons == 1) table = g_maneuverTables[8];
-            if (Host.Variant.IsGhostBearsLegacy && m_gblManeuvers != null) table = m_gblManeuvers;
+            table = Host.Ai.ManeuverTableOf(this, table);
 
             do
             {
@@ -561,31 +510,21 @@ namespace Demech2
             return false;
         }
 
-        // stupid: steer at the target and close to 15000, asking for avoid within 4500. Mercenaries (0x100431e6): close to
-        // the personality's back-off distance, and avoid within it (4500 at most).
+        // stupid: steer at the target and close to 15000 (Host.Ai.StupidApproach), asking for avoid within 4500
+        // (Host.Ai.StupidAvoids).
         public void ManeuverStupid(int p_target)
         {
             int bearing;
             SetTarget(p_target);
             if (!AvoidObstacles())
             {
-#if UNITY_EDITOR || MEKENGINE_MERCS
-                m_steering["drive.throttle"] = GetApproachThrottle(WeaponDef.Mercs ? m_mercsAvoidRange : 15000);
-#else
-                Steering["drive.throttle"] = GetApproachThrottle(15000);
-#endif
+                m_steering["drive.throttle"] = GetApproachThrottle(Host.Ai.StupidApproach(this));
                 bearing = SteerToTarget();
                 IsSharpTurn(bearing);
             }
             else bearing = GetTargetBearing();
 
-            // GBL (0x2d4e0): a back-off distance past 15000 replaces the 4500.
-#if UNITY_EDITOR || MEKENGINE_MERCS
-            if (WeaponDef.Mercs ? m_targetInfo.m_distance < Math.Min(m_mercsAvoidRange, 4500)
-                : Host.Variant.IsGhostBearsLegacy && m_gblAvoidRange > 15000 ? m_targetInfo.m_distance < m_gblAvoidRange : m_targetInfo.m_distance < 4500)
-#else
-            if (Host.Variant.IsGhostBearsLegacy && gblAvoidRange > 15000 ? Target.Distance < gblAvoidRange : Target.Distance < 4500)
-#endif
+            if (Host.Ai.StupidAvoids(this))
                 m_nextManeuver = c_maneuverAvoid;
             RunAIWeapons(bearing);
             JumpToTurn();
@@ -984,8 +923,7 @@ namespace Demech2
             for (int i = 0; i < m_config.m_weaponCount && !found; i++)
             {
                 WeaponSlot slot = m_config.m_weapons[i];
-                // Titanium (0x10064ea0): its pool test (FUN_10006032).
-                if (slot.m_state != WeaponSlot.Empty && (WeaponDef.Titanium ? m_config.TitaniumHasAmmo(slot) : slot.m_ammo != 0)) found = true;
+                if (slot.m_state != WeaponSlot.Empty && Host.Weapons.Loaded(m_config, slot)) found = true;
             }
 
             return !found && m_config.m_weaponCount != 0;

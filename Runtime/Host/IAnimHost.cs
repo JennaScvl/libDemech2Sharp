@@ -101,7 +101,7 @@ namespace Demech2
         // The real time in seconds.
         float RealTime { get; }
 
-        // The backdrop sets palette entries 0-15 itself (GBL DOS / Pentium).
+        // The backdrop sets palette entries 0-15 itself (the game's edition decides).
         bool OwnsFirstColors { get; }
     }
 }

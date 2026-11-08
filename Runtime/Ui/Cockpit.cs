@@ -17,9 +17,9 @@ namespace Demech2
     // CockpitDriver runs it each frame over the cockpit camera's view.
     public partial class Cockpit
     {
-        // The panels, by index (c_panel...). Titanium's 34 (Cockpit.Titanium.cs) number them differently.
+        // The panels, by index (c_panel...). A derived cockpit may number them differently (SetPanelLayout).
         protected const int PanelRadar = 0, PanelMechView = 2, PanelFirstWeapon = 3;
-        protected readonly int PanelTarget = 13, PanelTargetText = 14, PanelObjectives = 15, PanelNetwork = 16, PanelAutopilot = 17,
+        protected int PanelTarget = 13, PanelTargetText = 14, PanelObjectives = 15, PanelNetwork = 16, PanelAutopilot = 17,
             PanelSpeed = 18, PanelMasc = 19, PanelHeat = 20, PanelHeatRate = 21, PanelJets = 22, PanelAltimeter = 23,
             PanelCompass = 24, PanelKills = 25, PanelCount = 26;
 
@@ -34,79 +34,6 @@ namespace Demech2
             { 110, 175, 169, 189 }, { 170, 175, 209, 189 }, { 210, 175, 249, 189 }, { 1, 74, 35, 111 },
             { 115, 1, 205, 35 }, { 10, 136, 70, 145 },
         };
-
-        // Ghost Bear's Legacy's DOS MW2.EXE (GBL MW2.flat g_gblPanelPanes 0xa7180, 0x14-byte records): 29 panels, the
-        // classic ones with seven weapon panels a side (3 to 9, 10 to 16) and no kills panel; its MW2MECH.CPI holds 24
-        // rectangles (5 gauges, 19 panels) as Titanium's does.
-        static readonly int[,] GblPanelPanes =
-        {
-            { 13, 10, 80, 60 }, { 260, 145, 312, 197 }, { 258, 145, 309, 175 },
-            { 214, 15, 256, 23 }, { 214, 25, 256, 33 }, { 214, 35, 256, 43 }, { 214, 45, 256, 53 }, { 214, 55, 256, 63 },
-            { 214, 65, 256, 73 }, { 214, 75, 256, 83 },
-            { 268, 15, 319, 23 }, { 268, 25, 319, 33 }, { 268, 35, 319, 43 }, { 268, 45, 319, 53 }, { 268, 55, 319, 63 },
-            { 268, 65, 319, 73 }, { 268, 75, 319, 83 },
-            { 10, 145, 62, 179 }, { 10, 183, 70, 199 }, { 30, 70, 300, 170 }, { 30, 70, 300, 170 }, { 55, 190, 120, 199 },
-            { 275, 130, 317, 195 }, { 250, 188, 273, 199 }, { 110, 175, 169, 189 }, { 170, 175, 209, 189 },
-            { 210, 175, 249, 189 }, { 1, 74, 35, 111 }, { 115, 1, 205, 35 },
-        };
-
-        // GBL's g_cockpitPanelTextOrigins (0xa73c4) and g_cockpitPanelLightUpTimes (InitCockpitPanels' copy of 0x32aa8).
-        static readonly int[,] GblTextOrigins =
-        {
-            { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0x11ec, 0x2148 }, { 0x11ec, 0x2148 }, { 0x11ec, 0x2148 }, { 0x11ec, 0x2148 },
-            { 0x11ec, 0x2148 }, { 0x11ec, 0x2148 }, { 0x11ec, 0x2148 }, { 0x11ec, 0x2148 }, { 0x11ec, 0x2148 },
-            { 0x11ec, 0x2148 }, { 0x11ec, 0x2148 }, { 0x11ec, 0x2148 }, { 0x11ec, 0x2148 }, { 0x11ec, 0x2148 },
-            { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0xe666 }, { 0, 0 }, { 0, 0xa666 }, { 0, 0xa666 },
-            { 0, 0xa666 }, { 0, 0 }, { 0, 0 },
-        };
-        static readonly int[] GblLightUpTimes =
-        {
-            0x16c, 0xb6, 0xb6, 0x222, 0x240, 0x25e, 0x27c, 0x29a, 0x2b8, 0x2d6, 0x332, 0x314, 0x2f6, 0x2d8, 0x2b8, 0x2d6,
-            0x2f4, 0xb6, 0xb6, 0xb6, 0xb6, 0xb6, 0xb6, 0xb6, 0xb6, 0xb6, 0xb6, 0xb6, 0xb6,
-        };
-
-        static bool Gbl => Host.Variant.IsGhostBearsLegacy;
-
-        // Titanium Edition's cockpit (34 panels, the MFDs): Titanium, BattlePack and Mercenaries.
-        protected static bool Titanium => Host.Variant.CockpitTitanium;
-
-        // Titanium Edition's (Mercenaries' too) panels (mercsw.dll InitCockpitPanels 0x10016f77).
-        // The panels' 320x200 rectangles (0x1008f598), text origins (0x1008f840) and light-up times (0x1008fa68).
-        static readonly int[,] TiPanelPanes =
-        {
-            { 13, 10, 80, 60 }, { 260, 145, 312, 197 }, { 258, 145, 309, 179 },
-            { 214, 15, 256, 23 }, { 214, 25, 256, 33 }, { 214, 35, 256, 43 }, { 214, 45, 256, 53 }, { 214, 55, 256, 63 },
-            { 214, 65, 256, 73 }, { 214, 75, 256, 83 },
-            { 268, 15, 319, 23 }, { 268, 25, 319, 33 }, { 268, 35, 319, 43 }, { 268, 45, 319, 53 }, { 268, 55, 319, 63 },
-            { 268, 65, 319, 73 }, { 268, 75, 319, 83 },
-            { 10, 145, 61, 179 }, { 10, 183, 70, 199 }, { 30, 70, 300, 170 }, { 30, 70, 300, 170 }, { 55, 190, 120, 199 },
-            { 258, 95, 309, 129 }, { 250, 188, 273, 199 }, { 122, 130, 199, 194 }, { 144, 136, 177, 188 },
-            { 10, 95, 61, 129 }, { 5, 74, 80, 84 }, { 115, 1, 205, 35 }, { 10, 136, 70, 145 }, { 0, 0, 20, 20 },
-            { 71, 145, 122, 179 }, { 132, 145, 183, 179 }, { 193, 145, 244, 179 },
-        };
-
-        static readonly int[,] TiTextOrigins =
-        {
-            { 0, 0 }, { 0, 0 }, { 0, 0 },
-            { 0x11ec, 0x2148 }, { 0x11ec, 0x2148 }, { 0x11ec, 0x2148 }, { 0x11ec, 0x2148 }, { 0x11ec, 0x2148 },
-            { 0x11ec, 0x2148 }, { 0x11ec, 0x2148 }, { 0x11ec, 0x2148 }, { 0x11ec, 0x2148 }, { 0x11ec, 0x2148 },
-            { 0x11ec, 0x2148 }, { 0x11ec, 0x2148 }, { 0x11ec, 0x2148 }, { 0x11ec, 0x2148 },
-            { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0x4000 }, { 0, 0 }, { 0x3333, 0x3333 }, { 0, 0x8000 },
-            { 0x3333, 0x4000 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 },
-        };
-
-        protected static readonly int[] TiLightUpTimes =
-        {
-            0x16a, 0xb5, 0xb5, 0x21f, 0x23d, 0x25b, 0x279, 0x297, 0x2b5, 0x2d3, 0x32e, 0x310, 0x2f2, 0x2d4, 0x2b5, 0x2d3,
-            0x2f1, 0xb5, 0xb5, 0xb5, 0xb5, 0xb5, 0xb5, 0xb5, 0xb5, 0xb5, 0xb5, 0xb5, 0xb5, 0xb5, 0xb5, 0xb5, 0xb5, 0,
-        };
-
-        // The panels drawn on the mech view's shared transition (0x1008f9d8), rescaled for each in turn as the original
-        // does; panel 17 has the target panel's.
-        static readonly int[] TiMechViewTransitionPanels = { 2, 22, 26, 29, 30, 31 };
-
-        // The weapon panels shown (0x1008f590), the compass (0x10099fa4): TOGGLE_WEAPONS, TOGGLE_COMPASS.
-        public bool tiWeaponsShown = true;
 
         // g_cockpitPanelTextOrigins: 16.16 fractions of the panels.
         static readonly int[,] DefaultTextOrigins =
@@ -140,7 +67,7 @@ namespace Demech2
             public int LastPowerState;   // m_lastPowerState
             public int X, Y, Width, Height;
             public Action<Panel> DrawStartup, Draw, DrawShutdown, DrawStatic;
-            // Titanium's MFDs: the mode (+0x30), the view slot (+0xc) and the gauges.
+            // A multi-function display's mode, view slot and gauges (a derived cockpit's).
             public int Mode, MfdSlot = -1;
             public MfdGauges Gauges;
 
@@ -285,7 +212,7 @@ namespace Demech2
         // Player::m_targetInfo, as UpdateCockpit reads it each frame.
         int targetId;               // m_target: 0x100 | nav, 0x200 | player, 0x400 | thing; 0x1000 lost
         Vector3 targetPosition;     // units
-        int routeId = -1;           // Titanium's route nav (Player +0x104) and its place
+        int routeId = -1;           // the route's nav (ICockpitMech.Route) and its place
         Vector3 routePosition;
         int targetHeading, targetPitch, targetRange; // 16.16 degrees, units
 
@@ -299,23 +226,12 @@ namespace Demech2
             view = p_view;
             Current = this;
             arcGlitch = false;
-            if (Titanium)
-            {
-                (PanelTarget, PanelTargetText, PanelObjectives, PanelNetwork, PanelAutopilot) = (17, 18, 19, 20, 21);
-                (PanelSpeed, PanelMasc, PanelHeat, PanelHeatRate, PanelJets) = (22, 23, 24, 25, 26);
-                (PanelAltimeter, PanelCompass, PanelKills, PanelCount) = (27, 28, 29, 34);
-            }
-            else if (Gbl)
-            {
-                (PanelTarget, PanelTargetText, PanelObjectives, PanelNetwork, PanelAutopilot) = (17, 18, 19, 20, 21);
-                (PanelSpeed, PanelMasc, PanelHeat, PanelHeatRate, PanelJets) = (22, 23, 24, 25, 26);
-                (PanelAltimeter, PanelCompass, PanelKills, PanelCount) = (27, 28, -1, 29);
-            }
+            SetPanelLayout();
 
             panels = new Panel[PanelCount];
             panelPanes = new Pane[PanelCount];
             panelEnabled = new bool[PanelCount];
-            textOrigins = (int[,])(Titanium ? TiTextOrigins : Gbl ? GblTextOrigins : DefaultTextOrigins).Clone();
+            textOrigins = (int[,])TextOriginTable.Clone();
             TimedOverlays.Reset();
             OverrideShutdown = false;
             LoadLayout();
@@ -339,7 +255,7 @@ namespace Demech2
         {
             for (int i = 0; i < PanelCount; i++)
             {
-                int[,] defaults = Titanium ? TiPanelPanes : Gbl ? GblPanelPanes : DefaultPanelPanes;
+                int[,] defaults = PanelPaneTable;
                 panelPanes[i] = new Pane(defaults[i, 0], defaults[i, 1], defaults[i, 2], defaults[i, 3]);
             }
 
@@ -354,8 +270,8 @@ namespace Demech2
             }
         }
 
-        // The gpspec not marked remote (AI byte 0); in a MekNet match every pilot's is cleared (NetMatchDriver.Prepare),
-        // so the local slot's (SimMain.g_localPlayerId).
+        // The gpspec not marked remote (AI byte 0); in a networked match every pilot's is cleared, so the local slot's
+        // (SimMain.g_localPlayerId).
         protected static bool IsLocalPlayer(Player p_player) =>
             Host.Net.NetRules ? p_player.m_index == SimMain.g_localPlayerId : p_player.m_aiMode == 0;
 
@@ -373,11 +289,11 @@ namespace Demech2
             }
         }
 
-        // LoadCptFile: five gauge rectangles, fifteen panel rectangles (x, y, width, height; Titanium's 19, 0x10024961)
-        // and a point.
+        // LoadCptFile: five gauge rectangles, fifteen panel rectangles (x, y, width, height; CptRectCount in all) and a
+        // point.
         public void LoadCptFile(byte[] data)
         {
-            int count = Titanium || Gbl ? 24 : 20;
+            int count = CptRectCount;
             if (data == null || data.Length < count * 8 + 4) return;
             for (int i = 0; i < count; i++)
             {
@@ -453,9 +369,9 @@ namespace Demech2
             }
         }
 
-        // g_cockpitPanelTransitions: the mech view's and the target panel's (Titanium's mech view one is shared by six).
+        // g_cockpitPanelTransitions: the mech view's and the target panel's (SharesMechViewTransition).
         protected RectTransition TransitionOf(int p_panel) =>
-            (Titanium ? Array.IndexOf(TiMechViewTransitionPanels, p_panel) >= 0 : p_panel == PanelMechView) ? mechViewTransition
+            SharesMechViewTransition(p_panel) ? mechViewTransition
             : p_panel == PanelTarget ? targetTransition : null;
 
         // InitCockpitPanels: the panels, all enabled but the second (and the target panel without the radar), the
@@ -463,18 +379,14 @@ namespace Demech2
         void InitCockpitPanels()
         {
             for (int i = 0; i < PanelCount; i++) panelEnabled[i] = true;
-            if (Titanium)
-            {
-                InitTitaniumPanels();
-                return;
-            }
+            if (InitOwnPanels()) return;
 
             panelEnabled[1] = false;
             if (!Radar) panelEnabled[PanelTarget] = false;
 
             for (int i = 0; i < PanelCount; i++)
             {
-                var panel = new Panel { LightUpTime = (Gbl ? GblLightUpTimes : LightUpTimes)[i], Transition = TransitionOf(i), Enabled = panelEnabled[i] };
+                var panel = new Panel { LightUpTime = LightUpTable[i], Transition = TransitionOf(i), Enabled = panelEnabled[i] };
                 panel.SetTarget(panelPanes[i]);
                 panel.TextX = textOrigins[i, 0];
                 panel.TextY = textOrigins[i, 1];
@@ -512,12 +424,12 @@ namespace Demech2
         public void ResetCockpitPanels()
         {
             SetArcGlitch(false);
-            int lastRight = Titanium || Gbl ? 16 : 12;
+            int lastRight = LastRightWeaponPanel;
             for (int i = 3; i <= lastRight && i < PanelCount; i++) panels[i].Weapon = -1;
             LayoutWeaponPanels();
             for (int i = 0; i < PanelCount; i++)
             {
-                panels[i].LightUpTime = (Titanium ? TiLightUpTimes : Gbl ? GblLightUpTimes : LightUpTimes)[i];
+                panels[i].LightUpTime = LightUpTable[i];
                 panels[i].Transition = TransitionOf(i);
                 panels[i].Damage = 0;
                 if (panelEnabled[i]) panels[i].Enabled = true;
@@ -527,15 +439,15 @@ namespace Demech2
         // LayoutWeaponPanels: the weapons on hardpoints 5, 3 and 7 on the left panels (3 to 7), those on 4, 1 and 6 on
         // the right (8 to 12), those on 2 and 0 filling the rest, alternating; then the weapons reordered to match (the
         // left at even indices, the right at odd ones), their bins renumbered, and the slots left empty cleared.
-        // Titanium (0x100168a3): seven panels a side (3 to 9, 10 to 16), only assigned panels renumbered, no bins.
+        // A derived cockpit may have more panels a side (FirstRightWeaponPanel, LastRightWeaponPanel), and renumber only
+        // assigned panels without the bins (LayoutRenumbersBins).
         protected void LayoutWeaponPanels()
         {
             MechConfig config = mech.Config;
             if (config == null) return;
             WeaponSlot[] weapons = config.m_weapons;
             int count = weapons.Length;
-            // GBL (FUN_00032be0) as Titanium: seven a side, 14 weapons.
-            int firstRight = Titanium || Gbl ? 10 : 8, lastRight = Titanium || Gbl ? 16 : 12, afterRight = lastRight + 1;
+            int firstRight = FirstRightWeaponPanel, lastRight = LastRightWeaponPanel, afterRight = lastRight + 1;
             bool alternate = true;
             for (int i = 0; i < count; i++) weapons[i].m_index = i;
 
@@ -548,7 +460,7 @@ namespace Demech2
 
             void Assign(int p_panel, int p_weapon)
             {
-                // Not the original's: a MekNet match's fourteen weapons in a classic cockpit; the rest get no panel.
+                // More weapons than panels (a networked match's fourteen in a classic cockpit): the rest get no panel.
                 if (p_panel >= PanelCount) return;
                 panels[p_panel].SetName(WeaponDef.Of(weapons[p_weapon].m_type).m_name ?? "");
                 panels[p_panel].Weapon = p_weapon;
@@ -607,8 +519,8 @@ namespace Demech2
                 }
             }
 
-            // Not the original's: in a MekNet match the weapons keep the .mek's order on every machine (the slots the match's
-            // state names); the panels point at them where they are.
+            // In a networked match the weapons keep the .mek's order on every machine (the slots the match's state
+            // names); the panels point at them where they are.
             if (Host.Net.NetRules) return;
 
             // The weapons in the panels' order: the left ones at even indices, the right at odd.
@@ -636,13 +548,13 @@ namespace Demech2
                 if (panels[i].Weapon != -1)
                 {
                     WeaponSlot slot = weapons[panels[i].Weapon];
-                    if (!Titanium)
+                    if (LayoutRenumbersBins)
                     {
                         for (int j = 0; j < slot.m_binCount && j < 10; j++) config.m_ammoBins[slot.m_bins[j]].m_weapon = index;
                     }
                 }
 
-                if (!Titanium || panels[i].Weapon != -1)
+                if (LayoutRenumbersBins || panels[i].Weapon != -1)
                 {
                     panels[i].Weapon = index;
                     index += 2;
@@ -655,7 +567,7 @@ namespace Demech2
                 if (panels[i].Weapon != -1)
                 {
                     WeaponSlot slot = weapons[panels[i].Weapon];
-                    if (!Titanium)
+                    if (LayoutRenumbersBins)
                     {
                         for (int j = 0; j < slot.m_binCount && j < 10; j++) config.m_ammoBins[slot.m_bins[j]].m_weapon = index;
                     }
@@ -668,12 +580,8 @@ namespace Demech2
             for (int i = 0; i < count; i++)
             {
                 weapons[i] = reordered[i];
-                // Mercenaries (LayoutWeaponPanels 0x1005c34a): a slot with status 0 (the reorder's blanks) has no type.
-#if UNITY_EDITOR || MEKENGINE_MERCS
-                if (WeaponDef.Mercs ? weapons[i].m_status == 0 : weapons[i].m_type == 0 && weapons[i].m_ammo == 0) weapons[i].m_type = -1;
-#else
-                if (weapons[i].m_type == 0 && weapons[i].m_ammo == 0) weapons[i].m_type = -1;
-#endif
+                // A blank of the reorder (IsBlankSlot) has no type.
+                if (IsBlankSlot(weapons[i])) weapons[i].m_type = -1;
             }
 
             // With ten weapons the indices can pass the slots; those panels show nothing.
@@ -689,15 +597,11 @@ namespace Demech2
         public void Frame()
         {
             Art.ResetTextColors();
-            // The glitch: the arcs and a PPC's lock jam MoonBunny Edition's alone (GameplayOptions.MoonBunnyActive); damaged
-            // sensors and the test always. Off from the moment the mech dies (out, flags 6; wrecked or ejecting, power 4/5),
-            // not only once the cockpit has seen its wreck: a MekNet death included.
+            // The glitch: a derived cockpit's causes (ArcGlitchCause) and the test. Off from the moment the mech dies
+            // (out, flags 6; wrecked or ejecting, power 4/5), not only once the cockpit has seen its wreck.
             Mech pilot = SimMain.MechOf(SimMain.g_localPlayerId);
             bool dead = SimMain.g_localMechDestroyed || (mech.PlayerFlags & 6) != 0 || mech.PowerState == 4 || mech.PowerState == 5;
-            bool moonBunny = Host.Variant.MoonBunnyActive &&
-                             (Host.Cockpit.ArcsOnMech(SimMain.g_localPlayerId) || (pilot != null && pilot.LockJammed));
-            bool sensors = pilot != null && pilot.m_sensorsDamaged;
-            SetArcGlitch(!dead && (moonBunny || sensors || Host.Cockpit.RenderClock < arcGlitchTestUntil));
+            SetArcGlitch(!dead && (ArcGlitchCause(pilot) || Host.Cockpit.RenderClock < arcGlitchTestUntil));
             hud.Glitching = arcGlitch;
             DrawSatelliteFrame();
             UpdateCockpit();
@@ -914,18 +818,54 @@ namespace Demech2
 
         // ---- Game keys --------------------------------------------------------------------------------------------
 
-        // Titanium's (and Mercenaries') own panels and keys, which the game's cockpit adds: InitCockpitPanels' Titanium
-        // half (mercsw.dll 0x10016f77), and RunGameKey's MFD and HUD cases.
-        protected virtual void InitTitaniumPanels()
-        {
-        }
+        // ---- A derived cockpit's own layout and keys (each default the base game's) ----------------------------------
 
-        protected virtual bool RunTitaniumGameKey(int p_key) => false;
+        // The panels' numbering (PanelTarget and on, PanelCount), set before anything is made.
+        protected virtual void SetPanelLayout() { }
+
+        // The panels' 320x200 rectangles, text origins and light-up times; the cockpit file's rectangle count.
+        protected virtual int[,] PanelPaneTable => DefaultPanelPanes;
+        protected virtual int[,] TextOriginTable => DefaultTextOrigins;
+        protected virtual int[] LightUpTable => LightUpTimes;
+        protected virtual int CptRectCount => 20;
+
+        // The panels the mech view's transition is drawn on.
+        protected virtual bool SharesMechViewTransition(int p_panel) => p_panel == PanelMechView;
+
+        // InitCockpitPanels when the derived cockpit makes its own panels (true).
+        protected virtual bool InitOwnPanels() => false;
+
+        // LayoutWeaponPanels: the right side's first and last weapon panels; whether the reorder renumbers every left
+        // panel and the bins; a reordered blank slot (it gets no type).
+        protected virtual int FirstRightWeaponPanel => 8;
+        protected virtual int LastRightWeaponPanel => 12;
+        protected virtual bool LayoutRenumbersBins => true;
+        protected virtual bool IsBlankSlot(WeaponSlot p_slot) => p_slot.m_type == 0 && p_slot.m_ammo == 0;
+
+        // The frame's arc glitch from the derived cockpit's causes (p_pilot the local mech, or null).
+        protected virtual bool ArcGlitchCause(Mech p_pilot) => false;
+
+        // RunGameKey's cases of a derived cockpit (true when p_key is one).
+        protected virtual bool RunOwnGameKey(int p_key) => false;
+
+        // DrawWeaponPanel: whether a weapon panel shows; its text.
+        protected virtual bool WeaponPanelShown(Panel p_panel) => p_panel.Enabled;
+        protected virtual string WeaponPanelText(Panel p_panel, WeaponSlot p_weapon) =>
+            p_weapon.m_ammo < 0 ? p_panel.Name : $"{p_panel.Name} {p_weapon.m_ammo}";
+
+        // The objectives panel's words (the base game's given).
+        protected virtual string ObjectiveWord(string p_word) => p_word;
+
+        // The HUD: a derived cockpit's compass and crosshair (no altimeter, the pitch ignored by the lock and the
+        // compass's arrows, the tape the other way, the route's nav marked); the map's route nav; the map's heading.
+        protected virtual bool RouteHud => false;
+        protected virtual bool MapDrawsRoute => false;
+        protected virtual double MapHeadingDegrees(int p_heading) => p_heading / 65536.0;
 
         // RunGameKey's cockpit cases. Returns whether p_key is one.
         public bool RunGameKey(int p_key)
         {
-            if (Titanium && RunTitaniumGameKey(p_key)) return true;
+            if (RunOwnGameKey(p_key)) return true;
             bool powered = (mech.PlayerFlags & 0x2000) != 0;
             switch (p_key)
             {

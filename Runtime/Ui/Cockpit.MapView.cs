@@ -367,7 +367,7 @@ namespace Demech2
         {
             for (int i = 0; i < world.CockpitPlayers.Count; i++)
             {
-                // The local player (a MekNet match's own slot, not always the first).
+                // The local player (a networked match's own slot, not always the first).
                 if (i == SimMain.g_localPlayerId) continue;
                 Player player = world.CockpitPlayers[i];
                 int flags = player.m_flags;
@@ -398,11 +398,11 @@ namespace Demech2
             if (shape != null) hud.Shape(viewport, shape, 0, x, y);
         }
 
-        // DrawMapTarget: the player's target, in the view or at its edge; Titanium (0x10050371) then the route's nav, the
+        // DrawMapTarget: the player's target, in the view or at its edge; with MapDrawsRoute then the route's nav, the
         // same way, unless the first pass gave up.
         void DrawMapTarget(CockpitLayout p_layout)
         {
-            if (DrawMapTargetPass(p_layout, targetId, targetPosition) && Titanium) DrawMapTargetPass(p_layout, routeId, routePosition);
+            if (DrawMapTargetPass(p_layout, targetId, targetPosition) && MapDrawsRoute) DrawMapTargetPass(p_layout, routeId, routePosition);
         }
 
         bool DrawMapTargetPass(CockpitLayout p_layout, int p_id, Vector3 p_position)
@@ -513,9 +513,7 @@ namespace Demech2
                 int heading = (mech.HeadingFixed % 0x1680000 + 0x1680000) % 0x1680000;
                 if (p_layout.FormattedHeading != heading)
                 {
-                    // Titanium divides its float degrees by 65536 again (FUN_10050b49): always 0.0.
-                    // Not checked in DOS Mercenaries' map: kept to the Titanium editions.
-            double degrees = (Host.Variant.IsTitanium || Host.Variant.IsBattlePack) ? heading / 65536.0 / 65536.0 : heading / 65536.0;
+                    double degrees = MapHeadingDegrees(heading);
                     p_layout.HeadingText = p_layout.HeadingLabel + degrees.ToString("0.0").PadLeft(3);
                     p_layout.FormattedHeading = heading;
                 }

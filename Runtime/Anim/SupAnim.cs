@@ -89,7 +89,7 @@ namespace Demech2
         }
 
         // After the blend: g_supAnimPalette over the first 16 entries, then the dropship and its timer.
-        // Not in GBL DOS / Pentium: their backdrops set entries 0-15 themselves, in their own order.
+        // Unless the backdrop sets entries 0-15 itself, in its own order (IAnimHost.OwnsFirstColors).
         void StartAnimation(byte[] p_palette)
         {
             bool ownFirstColors = host.OwnsFirstColors;

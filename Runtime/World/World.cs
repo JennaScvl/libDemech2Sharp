@@ -30,10 +30,8 @@ namespace Demech2
         public readonly bool[] m_objectiveAnnounced = new bool[48];
         public bool m_missionResultAnnounced;
 
-        // Mercenaries: the word at [ebp-0x10] of UpdateObjective's frame (local_14), which ObjectiveConditionsHold (its
-        // loop counter) and ResetStarOrders (the star it pushes) share when UpdateObjectives calls them: what 0x400000
-        // clears the announcement of. Unknown before the first frame: 0.
-        public int m_mercsStackWord;
+        // The host's data for this world, or null.
+        public object m_ext;
     }
 
     // A game thing (gamething.h): flags 4 destroyed, 0x20 inspected, 0x40 an objective's, 0x100 "Unknown" until
@@ -76,10 +74,6 @@ namespace Demech2
         public int m_timeLimit;          // seconds (0: none)
         public string m_successSound = "", m_failSound = "";
         public int m_status;             // 0 in progress, 2 successful, 3 failed, 4 out of time
-#if UNITY_EDITOR || MEKENGINE_MERCS
-        public int m_affiliation;        // Mercenaries' +0x39: the star's affiliation byte when the table loaded
-        // Mercenaries: the table's 0x30 slots past its objectives, made as the original's code reaches them.
-        public readonly MissionObjective[] m_spare = new MissionObjective[48];
-#endif
+        public object m_ext;             // the host's data for this table, or null
     }
 }

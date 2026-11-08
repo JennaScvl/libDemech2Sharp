@@ -180,7 +180,7 @@ namespace Demech2
             g_requestedViewMode = c_viewCockpit;
         }
 
-        // Not the original's: the pilot's look, glances and eye angles cleared (a MekNet regenerate).
+        // Not the original's: the pilot's look, glances and eye angles cleared (a networked regenerate).
         public void ResetLook()
         {
             m_pan = m_tilt = 0;

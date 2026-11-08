@@ -7,11 +7,17 @@ namespace Demech2
         public static IFxHost Fx;
         public static ISoundHost Sound;
         public static INetRules Net;
-        public static IVariant Variant;
         public static IInputHost Input;
         public static IAnimHost Anim;
         public static ICockpitHost Cockpit;           // the cockpit and the in-mission UI
         public static IAudioHost Audio;               // the cockpit sounds, sound settings and speech
         public static ISegmentTestHost SegmentTest; // collision.c's segment tests: the game's override
+
+        // The rules a host may change; demech2's by default.
+        public static WeaponRules Weapons = new WeaponRules();
+        public static MechRules Mechs = new MechRules();
+        public static AiRules Ai = new AiRules();
+        public static EffectRules Effects = new EffectRules();
+        public static ObjectiveRules Objectives = new ObjectiveRules();
     }
 }

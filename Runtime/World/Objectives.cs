@@ -10,8 +10,8 @@ namespace Demech2
     // other missions' objectives, and the mission succeeds once every mandatory objective did, fails once one failed, or
     // runs out of time. A star's current objective is the first whose conditions hold; when it changes the star's orders
     // are reset (ResetStarOrders). Times are mission seconds (g_missionTime, the clock / 181). The original's network
-    // branches aren't ported; a MekNet match (not the original's) runs every star's objectives on every machine,
-    // every pilot reaching navs as the local one does. Mercenaries' quirks are the game's (Host.World.Mercs*).
+    // branches aren't ported; a networked match runs every star's objectives on every machine, every pilot reaching
+    // navs as the local one does. The host may change the slots, the announcements and the targets (Host.Objectives).
     public static class Objectives
     {
         // g_missionTime, g_forceMissionSuccess (the "icanthackit" cheat).
@@ -88,9 +88,7 @@ namespace Demech2
         // target (a nav's radius, when it has one). The local player reaching a nav while running marks it reached.
         static bool IsTeamNearTarget(World p_world, int p_target, int p_team)
         {
-#if UNITY_EDITOR || MEKENGINE_MERCS
-            if (Host.World.MercsObjectives) return Host.World.MercsIsTeamNearTarget(p_target, p_team);
-#endif
+            if (Host.Objectives.TeamNearTarget(p_target, p_team, out bool near)) return near;
             if (Teams.GetTeamLeader(p_world, p_team) < 0) return false;
             int index = p_target & 0xff;
             switch (p_target & 0xff00)
@@ -126,7 +124,7 @@ namespace Demech2
                     foreach (Player p in p_world.m_players)
                     {
                         if (p.m_team != p_team || !IsWithin(PositionOf(p_world, p.m_index) - nav.m_position, radius)) continue;
-                        // A MekNet host: a remote player reaches it too (the sound is the local player's).
+                        // A networked host: a remote player reaches it too (the sound is the local player's).
                         if (SimMain.IsPilot(p.m_index) && (p.m_flags & 0x2000) != 0 && (nav.m_flags & 0x20) == 0 && nav.m_used != 0)
                         {
                             nav.m_flags |= 0x20;
@@ -151,31 +149,24 @@ namespace Demech2
             return mech != null ? mech.ObjectPosition : p_world.m_players[p_index].m_position;
         }
 
-        // IsWithinRadius (Matrox, inline): the squares, exactly (whole units).
+        // IsWithinRadius (inline): the squares, exactly (whole units).
         public static bool IsWithin(Vector3Int p_d, long p_radius) =>
             (long)p_d.x * p_d.x + (long)p_d.y * p_d.y + (long)p_d.z * p_d.z <= p_radius * p_radius;
 
         // AnnounceObjective: the local star's objective p_objective, once: "<name> successful" (p_state 5) or "failed"
-        // (6) with its sound. Mercenaries' carries that text (and may announce p_entry, a slot past the table's
-        // objectives).
+        // (6) with its sound (or the host's, Host.Objectives.Announce; p_entry a slot past the table's objectives).
         static void AnnounceObjective(World p_world, int p_star, int p_objective, int p_state, MissionObjective p_entry = null)
         {
             if (p_star != p_world.m_localStar || p_objective < 0 || p_objective >= p_world.m_objectiveAnnounced.Length ||
                 p_world.m_objectiveAnnounced[p_objective]) return;
-#if UNITY_EDITOR || MEKENGINE_MERCS
-            bool mercs = Host.World.MercsObjectives;
-            MissionObjective objective = p_entry ?? (mercs ? Host.World.MercsSlot(p_star, p_objective) : p_world.m_missions[p_star].m_objectives[p_objective]);
-            if (mercs) Host.World.SayMercsObjective(objective, p_state);
+            MissionObjective objective = p_entry ?? Host.Objectives.Slot(p_world, p_star, p_objective);
+            if (Host.Objectives.Announce(objective, p_state)) { }
             else if (p_state == 5) MissionSpeech.SayLine(objective.m_successSound);
-#else
-            MissionObjective objective = p_entry ?? p_world.m_missions[p_star].m_objectives[p_objective];
-            if (p_state == 5) MissionSpeech.SayLine(objective.m_successSound);
-#endif
             else if (p_state == 6) MissionSpeech.SayLine(objective.m_failSound);
             p_world.m_objectiveAnnounced[p_objective] = true;
         }
 
-        // ChooseNetworkWinner (objective.c 0x1001b21a): in a network game that isn't a team game (a MekNet match
+        // ChooseNetworkWinner (objective.c 0x1001b21a): in a network game that isn't a team game (a networked match
         // without teams), a mission whose listed objectives come to exactly one and include a listed secondary
         // (priority 2) is a deathmatch: every player 0-7 is scored (kills of others minus kills of itself, empty
         // players' zeros counted as written), the best is the winner, a tie with the best -2. KillMech's, after each
@@ -223,18 +214,9 @@ namespace Demech2
         static void AnnounceMissionResult(World p_world, int p_star, int p_status)
         {
             if (p_star != p_world.m_localStar) return;
-#if UNITY_EDITOR || MEKENGINE_MERCS
-            if (Host.World.MercsObjectives)
-            {
-                // "Mission successful" / "failed" / "time exceeded" with the line.
-                if (p_status == 2) MissionSpeech.SayLine(p_world.m_missions[p_star].m_successSound, "Mission successful");
-                else if (p_status == 3) MissionSpeech.SayLine(p_world.m_missions[p_star].m_failSound, "Mission failed");
-                else if (p_status == 4) MissionSpeech.SayLine("BET68", "Mission time exceeded");
-                return;
-            }
-#endif
+            if (Host.Objectives.AnnounceMissionResult(p_world, p_star, p_status)) return;
 
-            // g_missionResultAnnounced: in a network game (a MekNet match), only the first result.
+            // g_missionResultAnnounced: in a network game (a networked match), only the first result.
             if (p_world.m_missionResultAnnounced && Host.Net.Active) return;
             p_world.m_missionResultAnnounced = true;
 
@@ -265,16 +247,13 @@ namespace Demech2
         static int ObjectiveState(World p_world, int p_star, int p_objective)
         {
             MissionTable mission = MissionOf(p_world, p_star);
-            // Mercenaries: a slot past the objectives may have been written (MercsSlot).
-#if UNITY_EDITOR || MEKENGINE_MERCS
-            if (Host.World.MercsObjectives && mission != null && p_objective >= mission.m_objectives.Count && p_objective < mission.m_spare.Length)
-                return mission.m_spare[p_objective] != null ? mission.m_spare[p_objective].m_state : 0;
-#endif
+            // A slot past the objectives the host may have written.
+            if (Host.Objectives.SpareState(mission, p_objective, out int spare)) return spare;
             return mission != null && p_objective >= 0 && p_objective < mission.m_objectives.Count ? mission.m_objectives[p_objective].m_state : 0;
         }
 
         // ObjectiveConditionsHold: one of the conditions, or every one; never a finished objective's, always a Begin's
-        // (type 0x10). p_frame: called by UpdateObjectives, its loop counter left in m_mercsStackWord (Mercenaries).
+        // (type 0x10). p_frame: called by UpdateObjectives, its loop counter left with the host (LoopEnded).
         public static bool ObjectiveConditionsHold(World p_world, int p_star, int p_objective, bool p_frame = false)
         {
             MissionObjective objective = p_world.m_missions[p_star].m_objectives[p_objective];
@@ -306,9 +285,7 @@ namespace Demech2
                 }
             }
 
-#if UNITY_EDITOR || MEKENGINE_MERCS
-            if (p_frame && Host.World.MercsObjectives) p_world.m_mercsStackWord = i;
-#endif
+            if (p_frame) Host.Objectives.LoopEnded(p_world, i);
             if (decided) return !objective.m_allConditions;
             return objective.m_allConditions;
         }
@@ -322,13 +299,8 @@ namespace Demech2
             MissionObjective objective = mission.m_objectives[p_objective];
             bool done = true, untouched = true, expired;
             int state = 3;
-            // Mercenaries' loop counter is the frame's stale word until a loop sets it (0x400000 reads it).
-#if UNITY_EDITOR || MEKENGINE_MERCS
-            bool mercs = Host.World.MercsObjectives;
-            int i = mercs ? p_world.m_mercsStackWord : 0;
-#else
-            int i = 0;
-#endif
+            // The loop counter (0x400000 reads it): 0, or the host's (LoopStart).
+            int i = Host.Objectives.LoopStart(p_world);
 
             // A network game: a successful destroy objective (type 2) whose targets aren't all destroyed again (a
             // player regenerated) is under way again.
@@ -383,7 +355,7 @@ namespace Demech2
 
                     break;
                 case 0x100:
-                    // A MekNet host: a star with a player in it goes as the local star.
+                    // A networked host: a star with a player in it goes as the local star.
                     if (!SimMain.IsPilotStar(p_star)) done = done && p_world.m_currentObjective[p_star] == p_objective;
                     for (i = 0; i < objective.m_targetCount; i++) done = done && IsTeamNearTarget(p_world, objective.m_targets[i], p_star);
                     break;
@@ -392,9 +364,7 @@ namespace Demech2
                     break;
             }
 
-#if UNITY_EDITOR || MEKENGINE_MERCS
-            if (mercs) p_world.m_mercsStackWord = i;
-#endif
+            Host.Objectives.LoopEnded(p_world, i);
             expired = objective.m_timeLimit >= 0 && objective.m_startTime >= 0 && g_missionTime - objective.m_startTime > objective.m_timeLimit;
 
             switch (objective.m_type)
@@ -402,11 +372,7 @@ namespace Demech2
                 case 0x10000:
                 {
                     if (objective.m_targetStar > p_world.m_objectiveCount) break;
-#if UNITY_EDITOR || MEKENGINE_MERCS
-                    MissionTable won = mercs ? Host.World.MercsTargetMissionOf(objective) : MissionOf(p_world, objective.m_targetStar);
-#else
-                    MissionTable won = MissionOf(p_world, objective.m_targetStar);
-#endif
+                    MissionTable won = Host.Objectives.TargetMissionOf(p_world, objective);
                     if (won == null) break;
                     won.m_status = 2;
                     AnnounceMissionResult(p_world, objective.m_targetStar, won.m_status);
@@ -418,11 +384,7 @@ namespace Demech2
                 case 0x20000:
                 {
                     if (objective.m_targetStar > p_world.m_objectiveCount) break;
-#if UNITY_EDITOR || MEKENGINE_MERCS
-                    MissionTable lost = mercs ? Host.World.MercsTargetMissionOf(objective) : MissionOf(p_world, objective.m_targetStar);
-#else
-                    MissionTable lost = MissionOf(p_world, objective.m_targetStar);
-#endif
+                    MissionTable lost = Host.Objectives.TargetMissionOf(p_world, objective);
                     if (lost == null) break;
                     lost.m_status = 3;
                     AnnounceMissionResult(p_world, objective.m_targetStar, lost.m_status);
@@ -433,11 +395,7 @@ namespace Demech2
                 }
                 case 0x40000:
                 {
-#if UNITY_EDITOR || MEKENGINE_MERCS
-                    MissionObjective other = mercs ? Host.World.MercsTargetObjectiveOf(objective) : TargetObjectiveOf(p_world, objective);
-#else
-                    MissionObjective other = TargetObjectiveOf(p_world, objective);
-#endif
+                    MissionObjective other = Host.Objectives.TargetObjectiveOf(p_world, objective);
                     if (other == null) break;
                     other.m_listed = !other.m_listed;
                     state = 5;
@@ -446,11 +404,7 @@ namespace Demech2
                 }
                 case 0x80000:
                 {
-#if UNITY_EDITOR || MEKENGINE_MERCS
-                    MissionObjective other = mercs ? Host.World.MercsTargetObjectiveOf(objective) : TargetObjectiveOf(p_world, objective);
-#else
-                    MissionObjective other = TargetObjectiveOf(p_world, objective);
-#endif
+                    MissionObjective other = Host.Objectives.TargetObjectiveOf(p_world, objective);
                     if (other == null || other.m_state == 6 || other.m_state == 5) break;
                     other.m_state = 6;
                     other.m_endTime = g_missionTime;
@@ -462,11 +416,7 @@ namespace Demech2
                 case 0x200000:
                 {
                     if (objective.m_targetStar > p_world.m_objectiveCount) break;
-#if UNITY_EDITOR || MEKENGINE_MERCS
-                    MissionTable restarted = mercs ? Host.World.MercsTargetMissionOf(objective) : MissionOf(p_world, objective.m_targetStar);
-#else
-                    MissionTable restarted = MissionOf(p_world, objective.m_targetStar);
-#endif
+                    MissionTable restarted = Host.Objectives.TargetMissionOf(p_world, objective);
                     if (restarted == null) break;
                     for (int j = 0; j < restarted.m_objectives.Count; j++)
                     {
@@ -485,25 +435,17 @@ namespace Demech2
                 }
                 case 0x400000:
                 {
-#if UNITY_EDITOR || MEKENGINE_MERCS
-                    MissionObjective other = mercs ? Host.World.MercsTargetObjectiveOf(objective) : TargetObjectiveOf(p_world, objective);
-#else
-                    MissionObjective other = TargetObjectiveOf(p_world, objective);
-#endif
+                    MissionObjective other = Host.Objectives.TargetObjectiveOf(p_world, objective);
                     if (other == null) break;
                     other.m_state = 3;
                     other.m_startTime = -1;
                     other.m_endTime = -1;
                     // The original clears the announcement of objective i, the last loop's counter (which no loop of
-                    // this type sets: here 0; Mercenaries' the stale stack word, m_mercsStackWord).
+                    // this type sets: here 0, or the host's LoopStart).
                     if (other.m_type != 0x10)
                     {
-#if UNITY_EDITOR || MEKENGINE_MERCS
-                        if (mercs) Host.World.MercsClearAnnounced(i);
+                        if (Host.Objectives.ClearAnnounced(p_world, i)) { }
                         else if (i >= 0 && i < p_world.m_objectiveAnnounced.Length) p_world.m_objectiveAnnounced[i] = false;
-#else
-                        if (i >= 0 && i < p_world.m_objectiveAnnounced.Length) p_world.m_objectiveAnnounced[i] = false;
-#endif
                     }
                     state = 5;
                     AnnounceObjective(p_world, p_star, p_objective, state);
@@ -511,11 +453,7 @@ namespace Demech2
                 }
                 case 0x100000:
                 {
-#if UNITY_EDITOR || MEKENGINE_MERCS
-                    MissionObjective other = mercs ? Host.World.MercsTargetObjectiveOf(objective) : TargetObjectiveOf(p_world, objective);
-#else
-                    MissionObjective other = TargetObjectiveOf(p_world, objective);
-#endif
+                    MissionObjective other = Host.Objectives.TargetObjectiveOf(p_world, objective);
                     if (other == null || other.m_state == 6 || other.m_state == 5) break;
                     other.m_state = 5;
                     other.m_endTime = g_missionTime;
@@ -611,7 +549,7 @@ namespace Demech2
 
         // The objective a type 0x40000 and up objective acts on, or null past the table (the original's bounds test
         // lets the count itself through: that objective is an empty one).
-        static MissionObjective TargetObjectiveOf(World p_world, MissionObjective p_objective)
+        public static MissionObjective TargetObjectiveOf(World p_world, MissionObjective p_objective)
         {
             if (p_objective.m_targetStar > p_world.m_objectiveCount) return null;
             MissionTable mission = MissionOf(p_world, p_objective.m_targetStar);
@@ -694,10 +632,8 @@ namespace Demech2
                     p_world.m_currentObjective[star] = current;
                     Host.World.DebugDumpMechs($"ResetStarOrders star {star} -> objective {current}");
                     StarOrders.ResetStarOrders(star);
-                    // ResetStarOrders' push of the star lands on the word (Mercenaries).
-#if UNITY_EDITOR || MEKENGINE_MERCS
-                    if (Host.World.MercsObjectives) p_world.m_mercsStackWord = star;
-#endif
+                    // ResetStarOrders' push of the star (the host's loop word).
+                    Host.Objectives.LoopEnded(p_world, star);
                 }
             }
         }

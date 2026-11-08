@@ -442,11 +442,7 @@ namespace Demech2
         // table's three, nothing).
         public static void SayLancemateReport(int p_message, int p_slot)
         {
-            if (Host.Variant.IsTitanium)
-            {
-                Host.World.SquadEventSpeech(p_message, p_slot);
-                return;
-            }
+            if (Host.World.SquadEventSpeech(p_message, p_slot)) return;
 
             if (p_message == -1 || p_message >= 11) return;
             int slot = p_slot >= 0 && p_slot < SlotSpeech.Length ? SlotSpeech[p_slot] : 0;
@@ -456,12 +452,8 @@ namespace Demech2
         // SayFormation: "Formation change to" and the formation's name.
         public static void SayFormation(int p_formation)
         {
-            // Titanium (FUN_1002a33e, FUN_1000cb34 -> FUN_10010b52): both mates' join line instead.
-            if (Host.Variant.IsTitanium)
-            {
-                Host.World.SquadEventSpeech(2, 0);
-                return;
-            }
+            // The host's squad speech for it (event 2, the mates' join line) instead, when it has one.
+            if (Host.World.SquadEventSpeech(2, 0)) return;
 
             if (p_formation >= 0 && p_formation < 6) MissionSpeech.QueueSpeech(FormationSpeech[0], FormationSpeech[p_formation + 1], -1);
         }

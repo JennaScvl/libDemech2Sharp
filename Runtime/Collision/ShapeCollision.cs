@@ -11,7 +11,7 @@ namespace Demech2
     }
 
     // The world's collider list and its tests (demech2 MW2/src/collision.c, shapecollision.c, shapelists.c' collider
-    // half, shapegeom.c's RayShapeDistance and ApproximateShapeDistance), the Matrox edition's floats as 16.16 units
+    // half, shapegeom.c's RayShapeDistance and ApproximateShapeDistance), the original's floats as 16.16 units
     // (Fixed). Each hit leaves the surface's 16.16 normal in g_hitNormal; TestSegmentCollision's in g_segmentNormal.
     // The terrain quadtrees are Quadtree's.
     public static class ShapeCollision

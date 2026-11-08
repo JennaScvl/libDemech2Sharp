@@ -1,7 +1,7 @@
 namespace Demech2
 {
     // Values that move toward a target over time on the 181 Hz clock (demech2 MW2/src/ramp.c, include/ramp.h). Ramp is
-    // the integer one; FloatRamp and WrappedRamp are the Matrox edition's floats as the lockstep's 16.16 (Fixed): a
+    // the integer one; FloatRamp and WrappedRamp are the original's floats as the lockstep's 16.16 (Fixed): a
     // ramp reaches its target after a duration in ticks; a wrapped ramp goes the short way around its period (angles).
 
     // Ramp (StartRamp, UpdateRamp).
@@ -35,7 +35,7 @@ namespace Demech2
         }
     }
 
-    // FloatRamp (StartFloatRamp, UpdateFloatRamp): the Matrox edition's ScalarRamp, its values 16.16.
+    // FloatRamp (StartFloatRamp, UpdateFloatRamp): the original's ScalarRamp, its values 16.16.
     public struct FloatRamp
     {
         public long m_target, m_value, m_duration; // m_duration: ticks, 16.16

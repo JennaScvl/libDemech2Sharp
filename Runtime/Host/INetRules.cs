@@ -1,6 +1,6 @@
 namespace Demech2
 {
-    // Not in the original: a MekNet match (the game's NetMatch and its driver), as the sim's branches ask it.
+    // A networked match (the game's), as the sim's branches ask it.
     public interface INetRules
     {
         // A match's rules (a live match, or the replay of one's recording): no machine's own perspective.

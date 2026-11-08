@@ -5,12 +5,10 @@ namespace Demech2
     // The HUD (demech2 MW2/src/hud.c): the compass and its target markers at the top, the altimeter at the left, the
     // crosshair where the torso aims and the target's marker, drawn over the 3D view.
     //
-    // Titanium 16-bit (mercsw.dll DrawHud 0x10032fe5) draws no altimeter, and compares the pitch with the fixed-point 3 as a
-    // float of degrees, so the crosshair's lock ignores it and both compass arrows always show.
+    // A derived cockpit's RouteHud draws no altimeter, ignores the pitch in the crosshair's lock and the compass arrows,
+    // runs the tape the other way and marks the route's nav too.
     public partial class Cockpit
     {
-        static bool TitaniumHud => (Host.Variant.IsTitanium || Host.Variant.IsBattlePack);
-
         // The altimeter's and the compass's places, 16.16 fractions of their panels until InitHudGauges.
         (int x, int y) altimeterOrigin = (0xb333, 0x8000), compassOrigin = (0x8000, 0x6666);
         int altimeterMarkWidth = 0xf0f, altimeterMarkHeight = 0xd79;
@@ -92,9 +90,9 @@ namespace Demech2
             {
                 DrawTargetMarker();
                 bool targetIsNav = targetId != 0 && (targetId & 0x1000) == 0 && (targetId & 0xf00) == 0x100;
-                if (TitaniumHud && !targetIsNav) DrawRouteNavMarker();
+                if (RouteHud && !targetIsNav) DrawRouteNavMarker();
             }
-            if (showAltimeter && !TitaniumHud) DrawAltimeter();
+            if (showAltimeter && !RouteHud) DrawAltimeter();
         }
 
         // DrawAltimeter: the tape at the mech's height, the marks of its level and of the ground below, and the target's
@@ -172,7 +170,7 @@ namespace Demech2
                 {
                     const int range = 3 << 16, pitch = 3;
                     if (targetId != 0 && (targetId & 0x1100) == 0 && def.m_shortRange < p_distance && def.m_longRange > p_distance &&
-                        (TitaniumHud || (range > p_pitch && -range < p_pitch)) && pitch > p_bearing && -pitch < p_bearing)
+                        (RouteHud || (range > p_pitch && -range < p_pitch)) && pitch > p_bearing && -pitch < p_bearing)
                     {
                         result = true;
                         shape = shapeIn;
@@ -250,8 +248,8 @@ namespace Demech2
             }
         }
 
-        // DrawRouteNavMarker (0x10033674): Titanium marks the route's nav too, unless the target is a nav itself (a lost
-        // or no target counts as not).
+        // DrawRouteNavMarker: RouteHud marks the route's nav too, unless the target is a nav itself (a lost or no target
+        // counts as not).
         void DrawRouteNavMarker()
         {
             if (routeId == 0 || (routeId & 0x1000) != 0 || (routeId & 0xf00) != 0x100) return;
@@ -302,12 +300,12 @@ namespace Demech2
             if (mech.Autopilot != 2)
             {
                 if ((targetId & 0xf00) == 0 || (targetId & 0x1000) != 0) return;
-                if (TitaniumHud || p_pitch > -(3 << 16))
+                if (RouteHud || p_pitch > -(3 << 16))
                 {
                     DrawShapeOverPane(compassOrigin.x, compassOrigin.y - compassArrowHeight - compassTapeAbove, 0x25, target);
                 }
 
-                if (TitaniumHud || p_pitch < 3 << 16)
+                if (RouteHud || p_pitch < 3 << 16)
                 {
                     DrawShapeOverPane(compassOrigin.x, compassArrowHeight + compassOrigin.y + compassTapeBelow, 0x1c, target);
                 }
@@ -340,9 +338,9 @@ namespace Demech2
             Pane target = gauge.Target;
             int heading = (p_heading + 360) % 360;
             int x, x2;
-            if (TitaniumHud)
+            if (RouteHud)
             {
-                // Titanium (0x10033d97) runs the tape the other way and wraps on its left edge.
+                // RouteHud runs the tape the other way and wraps on its left edge.
                 x = compassOrigin.x - Fixed.Mul16(compassScale, heading);
                 x2 = x < 0 ? x + Fixed.Mul16(compassScale, 360) : x - Fixed.Mul16(compassScale, 360);
             }

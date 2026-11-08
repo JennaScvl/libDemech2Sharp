@@ -51,35 +51,6 @@ namespace Demech2
         public int m_engageAtWill;
         public int m_gunnery, m_piloting;                         // m_piloting (S8)
         public int m_nextFireTime;
-        // Titanium's pilot personality (its AI parameter 6, player+0x189, an index into mercsw.dll 0x1008b2f8): weapon
-        // groups (player+0x192), the heat it fires up to (+0x1b0), its chance in 100 of a lock (+0x1b4).
-        public int m_aiGroupMode, m_aiHeatLimit = 65, m_aiLockChance;
-        // GBL (MW2.flat 0x217b0, 0x2c970): the AI's own maneuver table (+0x1ac), the distance its stupid maneuver backs
-        // off within (+0x1a8, 15000 by default), and a personality's group fire (+0x15a).
-        public ManeuverTable m_gblManeuvers;
-        public int m_gblAvoidRange = 15000;
-        public bool m_gblGroupFire;
-        public static bool GblAi => Host.Variant.IsGhostBearsLegacy;
-
-        // Titanium's personalities: {group mode, heat percent of 65, lock chance}; the fields the weapons read.
-        public static readonly (int groups, int heat, int lockChance)[] TitaniumPersonalities =
-        {
-            (0, 75, 25), (0, 75, 25), (1, 100, 15), (2, 75, 25), (2, 75, 60), (0, 75, 100), (0, 80, 85), (0, 75, 25),
-            (0, 75, 35),
-        };
-
-#if UNITY_EDITOR || MEKENGINE_MERCS
-        // Mercenaries' personalities (DOS-Win95 MERCSW.DLL g_aiPersonalities 0x100ad0b8, 9 x 0x1c; InitAIPersonality
-        // 0x10026c76): Titanium's weapon fields, and the distance the stupid maneuver backs off within (+0x1fe; 0 gives
-        // 15000) and the lead aim (+0x1c0: RunAIWeaponsLeading). Their maneuver tables (+0x202) are all the mech's own.
-        public static readonly (int avoidRange, bool lead)[] MercsPersonalities =
-        {
-            (0, false), (20000, false), (20000, false), (15000, false), (15000, false), (25000, false), (15000, true),
-            (25000, false), (30000, true),
-        };
-        public int m_mercsAvoidRange = 15000;
-        public bool m_mercsLeadAim;
-#endif
         public int m_restAlertRange, m_alertRange, m_leashRange;    // m_alertRange, m_leashRange
         public int m_nav = 0x1000;                       // a nav target id the AI placed, or 0x1000
 
@@ -114,7 +85,7 @@ namespace Demech2
         // an enemy mech its mech runs into.
         public void UpdateAI()
         {
-            // A MekNet client: the host alone runs the AI (its mechs' steering comes with their states).
+            // A networked client: the host alone runs the AI (its mechs' steering comes with their states).
             if (Host.Net.FollowsHost) return;
             if (m_player.m_aiMode == 1) return;
             if (m_aiState == c_aiStateDead) return;
@@ -317,63 +288,13 @@ namespace Demech2
                 if (m_alertRange == 0) m_alertRange = 250;
                 m_piloting = (sbyte)m_player.m_aiParams[4];
                 if (m_piloting == 0) m_piloting = 1;
-                // FUN_10007f21: the local player's star's mates get their voice group (gpspec +0x1e).
-                if (Host.Variant.IsTitanium && SimMain.PlayerOf(SimMain.g_localPlayerId) is Player local && local.m_team == m_player.m_team)
-                {
-                    Host.World.SetSquadVoice(m_player.m_slot, m_player.m_aiParams[7]);
-                }
-                m_gblManeuvers = null;
-                m_gblAvoidRange = 0;
-                m_gblGroupFire = false;
-#if UNITY_EDITOR || MEKENGINE_MERCS
-                m_mercsAvoidRange = 0;
-                m_mercsLeadAim = false;
-#endif
-                if (GblAi)
-                {
-                    // GBL @ 0x218c5: a gunnery of 100 to 103 names a personality (0xa62dc): gunnery and piloting 1, its
-                    // maneuvers, its back-off distance, and personality 2 fires its weapons as one group (a mech of one or
-                    // two weapons gets them all in group 0).
-                    int raw = (byte)m_player.m_aiParams[0];
-                    if (raw >= 100 && raw < 200 && raw % 100 < GblPersonalities.Length)
-                    {
-                        var personality = GblPersonalities[raw % 100];
-                        m_gunnery = 1;
-                        m_piloting = 1;
-                        m_gblAvoidRange = personality.range;
-                        m_gblManeuvers = personality.table;
-                        if (personality.groupFire)
-                        {
-                            m_gblGroupFire = true;
-                            if (m_config != null && m_config.m_weaponCount > 0 && m_config.m_weaponCount < 3)
-                                for (int i = 0; i < m_config.m_weaponCount; i++) SetWeaponGroup(i, 0);
-                            SelectWeaponGroup(0);
-                        }
-                    }
-                }
+                // The host's pilot personality, read before and after the skills' scaling.
+                Host.Ai.InitPersonality(this, 0);
                 m_gunnery = (sbyte)(m_gunnery + 1);
                 m_leashRange *= 100;
                 m_restAlertRange *= 100;
                 m_alertRange *= 100;
-                if (WeaponDef.Titanium)
-                {
-                    // FUN_100081ad: the personality (past the table's nine, the first's; the original reads on).
-                    int index = (byte)m_player.m_aiParams[6];
-                    var personality = TitaniumPersonalities[index < TitaniumPersonalities.Length ? index : 0];
-                    m_aiGroupMode = personality.groups;
-                    m_aiHeatLimit = (int)(personality.heat / 100.0 * 65.0);
-                    m_aiLockChance = personality.lockChance;
-#if UNITY_EDITOR || MEKENGINE_MERCS
-                    if (WeaponDef.Mercs)
-                    {
-                        var mercs = MercsPersonalities[index < MercsPersonalities.Length ? index : 0];
-                        m_mercsAvoidRange = mercs.avoidRange;
-                        m_mercsLeadAim = mercs.lead;
-                    }
-#endif
-
-                    if (m_aiGroupMode != 0) SelectWeaponGroup(0);
-                }
+                Host.Ai.InitPersonality(this, 1);
             }
 
             InitializeManeuvers();
@@ -776,11 +697,11 @@ namespace Demech2
             RunManeuver(p_target);
         }
 
-        // The AI's triggers let go: Titanium's group trigger (+0x27) with the weapon's (+0x25).
+        // The AI's triggers let go (the group's too, when the host's AI pulls it).
         public void ClearAIFire()
         {
             m_steering["arms.fire"] = 0;
-            if (WeaponDef.Titanium || (GblAi && m_gblGroupFire)) m_steering["arms.fire.group"] = 0;
+            if (Host.Ai.ClearsGroupTrigger(this)) m_steering["arms.fire.group"] = 0;
         }
 
         // ---- Transitions --------------------------------------------------------------------------------------------
@@ -908,11 +829,11 @@ namespace Demech2
             return delta;
         }
 
-        // GetTargetBearing: the bearing to the target, 16.16 degrees either way (Titanium's local player on the
-        // autopilot: the route's, 0x1000ac69).
+        // GetTargetBearing: the bearing to the target, 16.16 degrees either way (a pilot on the autopilot: the route's,
+        // Host.Mechs.Route).
         public int GetTargetBearing()
         {
-            int delta = (TitaniumRoute && IsPilot && m_autopilot != 0 ? m_routeInfo.m_heading : m_targetInfo.m_heading) - m_heading;
+            int delta = (IsPilot && m_autopilot != 0 ? Host.Mechs.Route(this) : m_targetInfo).m_heading - m_heading;
             if (delta > 0xb40000) delta -= 0x1680000;
             else if (delta < -0xb40000) delta += 0x1680000;
             return delta;
@@ -1317,10 +1238,7 @@ namespace Demech2
         // Whether it fired.
         public bool RunAIWeapons(int p_heading)
         {
-#if UNITY_EDITOR || MEKENGINE_MERCS
-            // Mercenaries (RunAIWeaponsDispatch 0x10022b70): a lead-aiming personality's own.
-            if (WeaponDef.Mercs && m_mercsLeadAim) return RunAIWeaponsLeading(p_heading);
-#endif
+            if (Host.Ai.RunWeapons(this, p_heading, out bool own)) return own;
             bool fired = false;
             int roll = 0;
             if (m_nextFireTime <= Clock.g_currentClock)
@@ -1328,36 +1246,15 @@ namespace Demech2
                 roll = SimRandom.RandomIntBelow(m_gunnery);
                 m_nextFireTime = roll * 22 + Clock.g_currentClock;
                 int delta = p_heading - TorsoTwist;
-#if UNITY_EDITOR || MEKENGINE_MERCS
-                // Mercenaries (0x10022e3c): the torso's pitch within 10 degrees of the target's too (the player's own pitch,
-                // +0x5c, has no counterpart here).
-                int pitchError = (TorsoPitch + m_targetInfo.m_pitch) % 0x1680000;
-                bool pitchOk = !WeaponDef.Mercs || (pitchError < 0xa0000 && pitchError > -0xa0000);
-                if (delta < 0xa0000 && delta > -0xa0000 && pitchOk)
-#else
-                if (delta < 0xa0000 && delta > -0xa0000)
-#endif
+                if (delta < 0xa0000 && delta > -0xa0000 && Host.Ai.AimPitchOk(this))
                 {
                     if (SimMain.IsPilot(m_aiGoal & 0xff) || SimRandom.RandomIntBelow(3) == 0)
                     {
                         SetTarget(S16(m_aiGoal));
-                        if (WeaponDef.Titanium)
-                        {
-                            // Titanium (0x10005633): the personality's chooser, the line of sight always checked, the
-                            // group's trigger for a group pilot, then maybe a lock.
-                            bool guided = false;
-                            if (roll == 0 && (m_aiGroupMode == 0 ? ChooseAIWeaponTitanium(out guided) : ChooseAIWeaponGroup(out guided)) &&
-                                CanSeeTarget(true))
-                            {
-                                m_steering[m_aiGroupMode == 0 ? "arms.fire" : "arms.fire.group"] = 1;
-                                fired = true;
-                                if (guided) TryAILock();
-                            }
-                        }
+                        if (Host.Ai.Fire(this, roll, ref fired)) { }
                         else if (roll == 0 && DecideAIFire() && (!m_skillFlags[4] || CanSeeTarget(true)))
                         {
-                            // GBL @ 0x2ec37: a group-fire personality pulls the group trigger (+0x27).
-                            m_steering[GblAi && m_gblGroupFire ? "arms.fire.group" : "arms.fire"] = 1;
+                            m_steering[Host.Ai.FireKey(this)] = 1;
                             fired = true;
                         }
                     }
@@ -1369,75 +1266,6 @@ namespace Demech2
             m_steering["torso.pitch"] = -(AimTorsoTilt(roll) * 0xf00);
             return fired;
         }
-
-#if UNITY_EDITOR || MEKENGINE_MERCS
-        // Mercenaries' RunAIWeaponsLeading (0x10022bc1; personalities 6 and 8): the aim led on the goal (ComputeLeadPoint), the
-        // torso within a degree of the lead's bearing and ten of its pitch; the goal not set as the target first; a moving
-        // player goal (its throttle off zero) gets the torso aimed without the gunnery's scatter.
-        public bool RunAIWeaponsLeading(int p_heading)
-        {
-            int yaw = p_heading, pitch = m_targetInfo.m_pitch;
-            ComputeLeadPoint(ref yaw, ref pitch);
-            int delta = yaw - TorsoTwist;
-            int pitchError = (TorsoPitch + pitch) % 0x1680000;
-            bool fired = false, guided = false;
-            int roll = 0;
-            if (m_nextFireTime <= Clock.g_currentClock)
-            {
-                roll = SimRandom.RandomIntBelow(m_gunnery);
-                m_nextFireTime = roll * 22 + Clock.g_currentClock;
-                if (delta < 0x10000 && delta > -0x10000 && pitchError < 0xa0000 && pitchError > -0xa0000 &&
-                    (SimMain.IsPilot(m_aiGoal & 0xff) || SimRandom.RandomIntBelow(3) == 0) && roll == 0)
-                {
-                    if ((m_aiGroupMode == 0 ? ChooseAIWeaponTitanium(out guided) : ChooseAIWeaponGroup(out guided)) && CanSeeTarget(true))
-                    {
-                        m_steering[m_aiGroupMode == 0 ? "arms.fire" : "arms.fire.group"] = 1;
-                        fired = true;
-                    }
-                }
-            }
-
-            if (guided && fired) TryAILock();
-            if (((m_aiGoal >> 8) & 0xf) == 2 && MechAt(m_aiGoal & 0xff) is Mech goal && goal.m_steering["drive.throttle"] != 0) roll = 0;
-            if (!fired) roll = 0;
-            m_steering["torso.yaw"] = AimTorsoPan(yaw, roll) * 0x2d00;
-            m_steering["torso.pitch"] = -(AddClamped(pitch / 0xf00, roll * 2, true) * 0xf00);
-            return fired;
-        }
-
-        // Mercenaries' ComputeLeadPoint (0x10023525): with a player as the goal (the target for the local player), the
-        // closing speed along the line to it (its 16.16 velocity's length, negative when it closes) against the selected
-        // weapon's shot speed gives the flight time (the target's range over the difference; 2 when they match); within the
-        // shot's lifetime and past a tick, the goal's place that far on sets p_yaw (from the heading, within half a turn)
-        // and p_pitch. Else they stay.
-        public void ComputeLeadPoint(ref int p_yaw, ref int p_pitch)
-        {
-            int goalId = IsPilot ? m_targetInfo.m_target : m_aiGoal;
-            if (((goalId >> 8) & 0xf) != 2 || m_config == null) return;
-            Mech goal = MechAt(goalId & 0xff);
-            if (goal == null) return;
-            WeaponDef def = m_selectedWeapon >= 0 && m_selectedWeapon < m_config.m_weapons.Length ? WeaponDef.Of(m_config.m_weapons[m_selectedWeapon].m_type) : default;
-            int shotSpeed = def.m_speed;
-            Vector3Int d = goal.ObjectPosition - ObjectPosition;
-            Vector3Int v = goal.Velocity;
-            if (v.x == 0 && v.y == 0 && v.z == 0) return;
-            long along = ((long)d.x * v.x >> 16) + ((long)d.z * v.z >> 16) + ((long)d.y * v.y >> 16);
-            int speed = (int)Fixed.Sqrt((long)v.x * v.x + (long)v.y * v.y + (long)v.z * v.z) >> 16;
-            if (along < 0) speed = -speed;
-            int time = Math.Abs(speed) == shotSpeed ? 2 : shotSpeed - speed != 0 ? m_targetInfo.m_range / (shotSpeed - speed) : 0;
-            if (time == 0 || time > def.m_lifetime || time <= Clock.g_deltaTime) return;
-            var lead = new Vector3Int(
-                (int)(goal.ObjectPosition.x + ((long)v.x * time >> 16)),
-                (int)(goal.ObjectPosition.y + ((long)v.y * time >> 16)),
-                (int)(goal.ObjectPosition.z + ((long)v.z * time >> 16)));
-            Targeting.GetBearingAndRange(lead - ObjectPosition, out int bearing, out _, out _, out int leadPitch);
-            int yaw = bearing - m_heading;
-            if (yaw > 0xb40000) yaw -= 0x1680000;
-            else if (yaw < -0xb40000) yaw += 0x1680000;
-            p_yaw = yaw;
-            p_pitch = leadPitch;
-        }
-#endif
 
         // DecideAIFire: the selected weapon fires when the target is within its range, the mech cool enough (below 65
         // with its heat), the weapon ready and loaded, and by chance per its recycle time; else the next weapon of its
@@ -1459,21 +1287,7 @@ namespace Demech2
                 if (fire)
                 {
                     fire = false;
-                    if (GblAi && m_gblGroupFire)
-                    {
-                        // GBL (0x2ec90): every weapon's heat counted, as written: the selected one's, once per weapon,
-                        // when it is ready and loaded.
-                        int ammo = 0, heat = 0;
-                        for (int k = 0; k < m_config.m_weaponCount; k++)
-                        {
-                            if (slot.m_state == WeaponSlot.Ready && slot.m_ammo != 0)
-                            {
-                                ammo += slot.m_ammo;
-                                heat += def.m_heatFx;
-                            }
-                        }
-                        if (ammo != 0 && (m_heat + heat) >> 16 < 65 && SimRandom.RandomIntBelow(def.m_recycle / 90 + 1) == 0) fire = true;
-                    }
+                    if (Host.Ai.DecideFire(this, slot, def, ref fire)) { }
                     else if ((def.m_heatFx + m_heat) >> 16 < 65 && IsSelectedWeaponReady() == 1 && slot.m_ammo != 0 &&
                         SimRandom.RandomIntBelow(def.m_recycle / 90 + 1) == 0)
                     {
@@ -1496,108 +1310,6 @@ namespace Demech2
             }
 
             return fire;
-        }
-
-        // Titanium's DecideAIFire (0x10005864): the selected weapon in range (band 1 or 2), the heat and the weapon's
-        // below the personality's limit, ready, with ammunition (FUN_10006032) and by chance per its recycle time; else the
-        // group's next. Types 0 and 4 tilt the torso up; a guided weapon asks for a lock.
-        public bool ChooseAIWeaponTitanium(out bool p_guided)
-        {
-            p_guided = false;
-            if (m_config == null) return false;
-            bool fire = false;
-            int type = 0;
-            WeaponDef def = default;
-            for (int i = 0; i < m_config.m_weaponCount && !fire; i++)
-            {
-                fire = false;
-                WeaponSlot slot = null;
-                if (m_selectedWeapon != -1)
-                {
-                    slot = m_config.m_weapons[m_selectedWeapon];
-                    type = slot.m_type;
-                    def = WeaponDef.Of(type);
-                    int band = GetTargetRangeBand(def);
-                    if (band > 0 && band < 3) fire = true;
-                }
-
-                if (fire)
-                {
-                    fire = m_heat + (long)def.m_heatFx < (long)m_aiHeatLimit << 16 && IsSelectedWeaponReady() == 1 &&
-                           m_config.TitaniumHasAmmo(slot) && SimRandom.RandomIntBelow(def.m_recycle / 0x5a + 1) == 0;
-                }
-
-                if (!fire) SelectNextWeaponInGroup(true);
-            }
-
-            if (fire)
-            {
-                if (type == 0) m_steering["torso.pitch"] += 0x1e000;
-                else if (type == 4) m_steering["torso.pitch"] += 0x3c000;
-                if (def.m_guided != 0) p_guided = true;
-            }
-
-            return fire;
-        }
-
-        // Titanium's group pilot (0x10005a23): every weapon in group 0, then those whose target is between their short and
-        // long ranges (band 2), loaded and not empty, into group 1, until their heat with the mech's would reach the
-        // personality's limit (an AI's; that ends it without firing). The first ready guided one is selected, else group
-        // 1; nothing in range moves on to the group's next weapon. The torso tilts for types 0 and 4.
-        public bool ChooseAIWeaponGroup(out bool p_guided)
-        {
-            p_guided = false;
-            if (m_config == null) return false;
-            bool fire = false;
-            long heat = 0; // 16.16
-            int tilt = 0, firstGuided = 0;
-            for (int i = 0; i < m_config.m_weaponCount && i < m_config.m_weapons.Length; i++)
-            {
-                WeaponSlot slot = m_config.m_weapons[i];
-                int type = (short)slot.m_type;
-                WeaponDef def = WeaponDef.Of(type);
-                slot.m_group = 0;
-                bool loaded = slot.m_pool == WeaponSlot.NoPool ||
-                              (slot.m_pool < m_config.m_poolCount && m_config.m_pools[slot.m_pool].m_shots != 0);
-                if (m_targetInfo.m_target == -1 || (m_targetInfo.m_target & 0x1000) != 0 || GetTargetRangeBand(def) != 2 || !loaded ||
-                    slot.m_state == WeaponSlot.Empty)
-                {
-                    continue;
-                }
-
-                if (!IsPilot && (long)m_aiHeatLimit << 16 <= m_heat + heat + def.m_heatFx)
-                {
-                    fire = false;
-                    break;
-                }
-
-                fire = true;
-                slot.m_group = 1;
-                heat += def.m_heatFx;
-                if (firstGuided == 0 && def.m_guided != 0 && slot.m_state == WeaponSlot.Ready) firstGuided = i + 1;
-                if (type == 0) tilt = 0x1e000;
-                if (type == 4) tilt = 0x3c000;
-            }
-
-            if (!fire) SelectNextWeaponInGroup(true);
-            else
-            {
-                m_steering["torso.pitch"] += tilt;
-                if (firstGuided == 0) SelectWeaponGroup(1);
-                else m_selectedWeapon = firstGuided - 1;
-            }
-
-            if (fire && firstGuided != 0) p_guided = true;
-            return fire;
-        }
-
-        // FUN_10005c42: by the personality's chance the lock comes on; the local player, the goal, hears it coming.
-        public void TryAILock()
-        {
-            if (SimRandom.RandomIntBelow(100) >= m_aiLockChance) return;
-            if (LockJammed) return;
-            m_flags |= 0x80;
-            if (m_aiGoal == (SimMain.g_localPlayerId | c_aiTargetPlayer)) CockpitSound.PlaySoundEffect(Host.Anim.MapSoundId(0x6f), 100, 0x40, 5, 0x32);
         }
 
         // GetTargetRangeBand: 3 within the weapon's short range, 2 within its long one, 1 right at it, 0 beyond.
@@ -1643,8 +1355,8 @@ namespace Demech2
         public void RunAutopilot()
         {
             if (m_autopilot == 0) return;
-            // Titanium (0x100356c0): the route's nav, which the nav cycles keep with the main target's.
-            PlayerTargetInfo route = TitaniumRoute ? m_routeInfo : m_targetInfo;
+            // The route's nav (Host.Mechs.Route; the target's by default).
+            PlayerTargetInfo route = Host.Mechs.Route(this);
             if (m_autopilot == 1)
             {
                 if ((route.m_target & 0x100) == 0 || (route.m_target & 0x1000) != 0)
@@ -1710,7 +1422,7 @@ namespace Demech2
         public void PunchInAutoHeading()
         {
             if (m_autopilot == 1) return;
-            (TitaniumRoute ? m_routeInfo : m_targetInfo).m_heading = (m_heading + 0x1680000 + m_torsoTwist.m_value) % 0x1680000;
+            Host.Mechs.Route(this).m_heading = (m_heading + 0x1680000 + m_torsoTwist.m_value) % 0x1680000;
         }
     }
 }

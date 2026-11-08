@@ -1,6 +1,6 @@
 namespace Demech2
 {
-    // A ray (demech2 MW2/include/ray.h, MW2/src/ray.c), the Matrox edition's floats as 16.16 fixed point (Fixed): a
+    // A ray (demech2 MW2/include/ray.h, MW2/src/ray.c), the original's floats as 16.16 fixed point (Fixed): a
     // segment from (x0, y0, z0) to (x1, y1, z1) in 16.16 units, its delta, and once built its 16.16 direction and
     // length. Built "fixed", the length is the approximate one (ApproximateVectorLength) and the direction the delta
     // over it, so not quite a unit vector; built "float", the length is the exact root and the direction a unit
